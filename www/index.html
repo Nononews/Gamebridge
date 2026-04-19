@@ -825,6 +825,7 @@
 </head>
 
 <body class="theme-init">
+    <script src="capacitor.js"></script>
 
     <!-- CANVAS PARA BRASAS DE FONDO -->
     <canvas id="bg-canvas"></canvas>
@@ -1255,11 +1256,50 @@
             btn.addEventListener('touchcancel', () => btn.classList.remove('active'));
         });
 
-        // --- 7. CONEXIÓN ---
-        const connectToPC = () => {
+        // --- 7. CONEXIÓN Y PUENTE NATIVO CAPACITOR ---
+        const connectToPC = async () => {
             hapticUI(40); document.getElementById('settings-modal').classList.remove('active'); showScreen('screen-connect');
-            setTimeout(() => document.getElementById('connect-log').innerText = currentType === 'racing' ? "Iniciando Giroscopio..." : "Sincronizando Layout...", 1000);
-            setTimeout(() => { hapticUI([30, 50, 30]); setMode('play'); showScreen('screen-gamepad'); }, 2500);
+            
+            try {
+                if(window.Capacitor && window.Capacitor.Plugins.GamepadPlugin) {
+                    document.getElementById('connect-log').innerText = "Iniciando Protocolo HID Bluetooth Nativo...";
+                    await window.Capacitor.Plugins.GamepadPlugin.initBluetooth();
+                    document.getElementById('connect-log').innerText = "Permisos concedidos. Empareja el PC con Android...";
+                } else {
+                    document.getElementById('connect-log').innerText = "Simulando conexión (Entorno no nativo)...";
+                }
+            } catch (e) {
+                document.getElementById('connect-log').innerText = "Error Bluetooh: " + e.message;
+                return;
+            }
+
+            setTimeout(() => { hapticUI([30, 50, 30]); setMode('play'); showScreen('screen-gamepad'); startGamepadLoop(); }, 3500);
+        };
+
+        // Bucle de Gamepad para enviar inputs al PC
+        const startGamepadLoop = () => {
+            if(!window.Capacitor || !window.Capacitor.Plugins.GamepadPlugin) return;
+            
+            setInterval(() => {
+                if(appState !== 'play') return;
+                
+                // Simulación de lectura de estado actual
+                let buttons = 0;
+                let lx = 128, ly = 128, rx = 128, ry = 128;
+                
+                // Botón interactivo activo
+                if(document.querySelector('.act-bottom.active')) buttons |= (1 << 0); // A
+                if(document.querySelector('.act-right.active')) buttons |= (1 << 1); // B
+                if(document.querySelector('.act-left.active')) buttons |= (1 << 2); // X
+                if(document.querySelector('.act-top.active')) buttons |= (1 << 3); // Y
+                
+                // Enviar Reporte al Plugin de Java
+                window.Capacitor.Plugins.GamepadPlugin.sendReport({
+                    buttons: buttons,
+                    leftX: lx, leftY: ly, rightX: rx, rightY: ry
+                }).catch(e => console.error("Error Report:", e));
+
+            }, 20); // 50 Hz refresh rate
         };
     </script>
 </body>
