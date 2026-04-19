@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GameBridge Pro Ultimate</title>
+    <style>
+        /* =========================================
+           1. VARIABLES Y TEMÁTICAS (COLORES)
+           ========================================= */
+        :root {
+            --bg-dark: #07090e;
+            --bg-panel: rgba(17, 21, 32, 0.6);
+            --text-main: #ffffff;
+            --text-muted: #8892b0;
+        }
+
+        /* Tema Inicio (Morado Neón original) */
+        body.theme-init {
+            --theme-color: rgba(170, 85, 255, 0.15);
+            --theme-glow: #aa55ff;
+            --theme-accent: #d4aaff;
+            --rgb-glow: 170, 85, 255;
+        }
+
+        /* Azul PlayStation */
+        body.theme-ps {
+            --theme-color: rgba(0, 110, 255, 0.15);
+            --theme-glow: #0088ff;
+            --theme-accent: #00d4ff;
+            --rgb-glow: 0, 136, 255;
+        }
+
+        /* Verde Xbox */
+        body.theme-xbox {
+            --theme-color: rgba(16, 124, 16, 0.15);
+            --theme-glow: #107c10;
+            --theme-accent: #00ff66;
+            --rgb-glow: 16, 124, 16;
+        }
+
+        /* Naranja Genérico */
+        body.theme-generic {
+            --theme-color: rgba(255, 110, 0, 0.15);
+            --theme-glow: #ff7700;
+            --theme-accent: #ffae00;
+            --rgb-glow: 255, 119, 0;
+        }
+
+        /* Rojo Carreras (Racing) */
+        body.theme-racing {
+            --theme-color: rgba(255, 20, 50, 0.15);
+            --theme-glow: #ff1432;
+            --theme-accent: #ff5e00;
+            --rgb-glow: 255, 20, 50;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+            transition: background-color 0.8s ease;
+        }
+
+        /* =========================================
+           2. SISTEMA DE FONDOS Y MARCA DE AGUA
+           ========================================= */
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .watermark {
+            position: absolute;
+            bottom: 15px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.3);
+            letter-spacing: 3px;
+            font-weight: 300;
+            text-transform: uppercase;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .watermark span {
+            font-weight: 800;
+            color: var(--theme-glow);
+            text-shadow: 0 0 10px var(--theme-glow);
+            transition: color 0.8s, text-shadow 0.8s;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .screen.active {
+            display: flex;
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.98);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* =========================================
+           3. PANTALLA 1: SELECCIÓN DE MANDO
+           ========================================= */
+        #screen-selection {
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, rgba(17, 22, 37, 0.8) 0%, var(--bg-dark) 100%);
+            overflow-y: auto;
+        }
+
+        .header-title {
+            font-size: 2.5rem;
+            font-weight: 900;
+            background: linear-gradient(120deg, #888888 0%, #ffffff 40%, var(--theme-glow) 50%, #ffffff 60%, #888888 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: sword-shine 3.5s linear infinite;
+            transition: background 0.8s;
+        }
+
+        @keyframes sword-shine {
+            0% {
+                background-position: 200% center;
+            }
+
+            100% {
+                background-position: -200% center;
+            }
+        }
+
+        .header-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-container {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 900px;
+            padding-bottom: 40px;
+            z-index: 2;
+        }
+
+        .controller-card {
+            background: var(--bg-panel);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            width: 190px;
+            padding: 25px 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .controller-card:hover {
+            background: rgba(25, 30, 45, 0.8);
+        }
+
+        .controller-card.ps:active {
+            border-color: #0088ff;
+            box-shadow: 0 0 25px rgba(0, 136, 255, 0.3);
+            transform: scale(0.95);
+        }
+
+        .controller-card.xbox:active {
+            border-color: #107c10;
+            box-shadow: 0 0 25px rgba(16, 124, 16, 0.3);
+            transform: scale(0.95);
+        }
+
+        .controller-card.generic:active {
+            border-color: #ff7700;
+            box-shadow: 0 0 25px rgba(255, 119, 0, 0.3);
+            transform: scale(0.95);
+        }
+
+        .controller-card.racing:active {
+            border-color: #ff1432;
+            box-shadow: 0 0 25px rgba(255, 20, 50, 0.3);
+            transform: scale(0.95);
+        }
+
+        .card-icon svg {
+            width: 55px;
+            height: 55px;
+            margin-bottom: 15px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .controller-card.ps .card-icon {
+            color: #00d4ff;
+            filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.4));
+        }
+
+        .controller-card.xbox .card-icon {
+            color: #00ff66;
+            filter: drop-shadow(0 0 6px rgba(0, 255, 102, 0.4));
+        }
+
+        .controller-card.generic .card-icon {
+            color: #ffae00;
+            filter: drop-shadow(0 0 6px rgba(255, 174, 0, 0.4));
+        }
+
+        .controller-card.racing .card-icon {
+            color: #ff5e00;
+            filter: drop-shadow(0 0 6px rgba(255, 94, 0, 0.4));
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+
+        .card-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* =========================================
+           4. PANTALLA 2: GAMEPAD Y EDITOR
+           ========================================= */
+        #screen-gamepad {
+            background: radial-gradient(circle at 50% 50%, var(--theme-color) 0%, transparent 80%);
+            transition: background 0.5s ease;
+        }
+
+        .editor-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .top-toolbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 12px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, rgba(7, 9, 14, 0.95), transparent);
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+        }
+
+        .status-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--theme-glow);
+            box-shadow: 0 0 10px var(--theme-glow);
+            transition: background 0.5s, box-shadow 0.5s;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-outline {
+            background: transparent;
+        }
+
+        .btn-primary {
+            background: var(--theme-glow);
+            color: #fff;
+            border-color: var(--theme-glow);
+            box-shadow: 0 0 15px var(--theme-color);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            transition: background 0.5s, border-color 0.5s, box-shadow 0.5s;
+        }
+
+        /* Modal Ajustes */
+        .settings-modal {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            background: rgba(17, 21, 32, 0.95);
+            border: 1px solid var(--theme-glow);
+            border-radius: 12px;
+            padding: 15px;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 200;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            transition: border-color 0.5s;
+        }
+
+        .settings-modal.active {
+            display: flex;
+        }
+
+        .settings-title {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: var(--theme-glow);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            transition: color 0.5s;
+        }
+
+        .haptic-opts {
+            display: flex;
+            gap: 5px;
+        }
+
+        .opt-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid transparent;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .opt-btn.active {
+            background: var(--theme-glow);
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* Panel Slider */
+        .scale-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 15, 25, 0.95);
+            padding: 15px 30px;
+            border-radius: 15px;
+            border: 2px solid var(--theme-glow);
+            display: none;
+            align-items: center;
+            gap: 20px;
+            z-index: 999;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9), inset 0 0 20px var(--theme-color);
+            backdrop-filter: blur(10px);
+            transition: border-color 0.5s, box-shadow 0.5s;
+        }
+
+        .scale-panel.active {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translate(-50%, 20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translate(-50%, 0);
+                opacity: 1;
+            }
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 180px;
+            background: rgba(255, 255, 255, 0.2);
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--theme-glow);
+            box-shadow: 0 0 15px var(--theme-glow);
+            border: 2px solid #fff;
+            transition: background 0.5s, box-shadow 0.5s;
+        }
+
+        #scale-value {
+            color: var(--theme-glow);
+            font-weight: 900;
+            font-size: 1.1rem;
+            display: inline-block;
+            width: 48px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.5s;
+        }
+
+        /* =========================================
+           5. ELEMENTOS DEL GAMEPAD
+           ========================================= */
+        .gamepad-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        .gp-element {
+            position: absolute;
+            transform-origin: center center;
+        }
+
+        .racing-el {
+            display: none;
+        }
+
+        .standard-el {
+            display: block;
+        }
+
+        body.theme-racing .standard-el {
+            display: none;
+        }
+
+        body.theme-racing .racing-el {
+            display: block;
+        }
+
+        .interactive-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #aaa;
+            font-weight: bold;
+            box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05), 0 5px 10px rgba(0, 0, 0, 0.5);
+            transition: background 0.1s, transform 0.1s, box-shadow 0.1s, color 0.1s, border-color 0.1s;
+        }
+
+        .state-test .interactive-btn:active,
+        .state-test .interactive-btn.active,
+        .state-play .interactive-btn:active,
+        .state-play .interactive-btn.active {
+            transform: scale(0.9);
+            background: var(--theme-glow);
+            color: #000;
+            box-shadow: 0 0 20px var(--theme-glow);
+            border-color: #fff;
+        }
+
+        /* Joysticks */
+        .analog-stick {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.5) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .analog-thumb {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #444, #222);
+            border: 2px solid #666;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.2);
+            position: absolute;
+            transition: transform 0.1s ease-out;
+        }
+
+        .analog-thumb.active-visual {
+            background: var(--theme-glow);
+            border-color: #fff;
+            transition: none;
+        }
+
+        /* D-PAD */
+        .dpad {
+            width: 110px;
+            height: 110px;
+            position: relative;
+        }
+
+        .d-btn {
+            position: absolute;
+            background: #1a1f2e;
+            border: 1px solid #2a3143;
+        }
+
+        .d-up {
+            top: 0;
+            left: 35px;
+            width: 40px;
+            height: 35px;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            border-bottom: none;
+        }
+
+        .d-down {
+            top: 75px;
+            left: 35px;
+            width: 40px;
+            height: 35px;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            border-top: none;
+        }
+
+        .d-left {
+            top: 35px;
+            left: 0;
+            width: 35px;
+            height: 40px;
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+            border-right: none;
+        }
+
+        .d-right {
+            top: 35px;
+            left: 75px;
+            width: 35px;
+            height: 40px;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            border-left: none;
+        }
+
+        .d-center {
+            top: 35px;
+            left: 35px;
+            width: 40px;
+            height: 40px;
+            background: #1f2536;
+            pointer-events: none;
+        }
+
+        /* BOTONES DE ACCIÓN */
+        .act-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #1f2536, #111520);
+            border: 2px solid #2a3143;
+            font-size: 1.1rem;
+        }
+
+        body.theme-ps .act-top {
+            color: #00e676;
+            border-color: rgba(0, 230, 118, 0.3);
+        }
+
+        body.theme-ps .act-bottom {
+            color: #2979ff;
+            border-color: rgba(41, 121, 255, 0.3);
+        }
+
+        body.theme-ps .act-left {
+            color: #ff4081;
+            border-color: rgba(255, 64, 129, 0.3);
+        }
+
+        body.theme-ps .act-right {
+            color: #ff1744;
+            border-color: rgba(255, 23, 68, 0.3);
+        }
+
+        body.theme-xbox .act-top {
+            color: #ffc107;
+            border-color: rgba(255, 193, 7, 0.3);
+        }
+
+        body.theme-xbox .act-bottom {
+            color: #00e676;
+            border-color: rgba(0, 230, 118, 0.3);
+        }
+
+        body.theme-xbox .act-left {
+            color: #2979ff;
+            border-color: rgba(41, 121, 255, 0.3);
+        }
+
+        body.theme-xbox .act-right {
+            color: #ff1744;
+            border-color: rgba(255, 23, 68, 0.3);
+        }
+
+        body.theme-generic .act-btn {
+            color: #ffae00;
+            border-color: rgba(255, 174, 0, 0.3);
+        }
+
+        .shoulder-group {
+            padding: 10px 25px;
+            background: linear-gradient(180deg, #2a3143, #151a25);
+            border-radius: 8px;
+            border: 1px solid #3d465c;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .stick-btn-group {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.75rem;
+        }
+
+        /* RACING INDEPENDIENTES (Mejorado) */
+        .pedal-btn {
+            background: linear-gradient(180deg, #222, #111);
+            border: 2px solid #444;
+            border-radius: 10px;
+        }
+
+        .pedal-gas {
+            width: 55px;
+            height: 90px;
+            border-radius: 10px;
+        }
+
+        .pedal-brake {
+            width: 65px;
+            height: 60px;
+            border-radius: 10px;
+        }
+
+        .gear-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: #1a1f2e;
+            border: 2px solid #333;
+            font-size: 1.1rem;
+        }
+
+        .steer-btn {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background: #1a1f2e;
+            border: 2px solid #333;
+            font-size: 1.4rem;
+        }
+
+        .pedal-btn svg,
+        .handbrake-icon svg {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .pedal-gas svg {
+            width: 30px;
+            height: 50px;
+        }
+
+        .pedal-brake svg {
+            width: 35px;
+            height: 30px;
+        }
+
+        .handbrake-icon svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        /* =========================================
+           6. ESTADOS DEL CONTENEDOR (EDIT MODE)
+           ========================================= */
+        .state-edit .editor-grid {
+            opacity: 0.5;
+        }
+
+        .state-edit .gp-element {
+            cursor: move;
+            border-radius: 10px;
+        }
+
+        .state-edit .gp-element.selected {
+            outline: 2px dashed var(--theme-accent);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 15px var(--theme-color);
+        }
+
+        .state-play .top-toolbar {
+            transform: translateY(-100%);
+        }
+
+        /* =========================================
+           7. PANTALLA DE CONEXIÓN
+           ========================================= */
+        #screen-connect {
+            justify-content: center;
+            align-items: center;
+            background: var(--bg-dark);
+        }
+
+        .radar {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 2px solid var(--theme-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 25px;
+            position: relative;
+            transition: border-color 0.5s;
+        }
+
+        .radar::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid var(--theme-glow);
+            animation: ping 1.5s infinite;
+            transition: border-color 0.5s;
+        }
+
+        @keyframes ping {
+
+            75%,
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body class="theme-init">
+
+    <!-- CANVAS PARA BRASAS DE FONDO -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- SCREEN 1: SELECCIÓN -->
+    <div id="screen-selection" class="screen active">
+        <h1 class="header-title">GameBridge</h1>
+        <p class="header-subtitle">Selecciona tu Perfil</p>
+
+        <div class="card-container">
+            <div class="controller-card ps" onclick="startSetup('ps')">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z">
+                        </path>
+                        <circle cx="9" cy="14" r="1.5"></circle>
+                        <circle cx="15" cy="14" r="1.5"></circle>
+                    </svg>
+                </div>
+                <div class="card-title">PlayStation</div>
+                <div class="card-desc">Simétrico Azul</div>
+            </div>
+
+            <div class="controller-card xbox" onclick="startSetup('xbox')">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z">
+                        </path>
+                        <circle cx="7" cy="10" r="1.5"></circle>
+                        <circle cx="15" cy="14" r="1.5"></circle>
+                    </svg>
+                </div>
+                <div class="card-title">Xbox</div>
+                <div class="card-desc">Asimétrico Verde</div>
+            </div>
+
+            <div class="controller-card generic" onclick="startSetup('generic')">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+                        <path d="M6 12h4"></path>
+                        <path d="M8 10v4"></path>
+                        <circle cx="16" cy="12" r="1.5"></circle>
+                        <circle cx="18" cy="10" r="1.5"></circle>
+                    </svg>
+                </div>
+                <div class="card-title">Genérico</div>
+                <div class="card-desc">Estándar Naranja</div>
+            </div>
+
+            <div class="controller-card racing" onclick="startSetup('racing')">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="2"></circle>
+                        <path d="M12 14v8M4 9l7 4M20 9l-7 4"></path>
+                    </svg>
+                </div>
+                <div class="card-title">Carreras</div>
+                <div class="card-desc">Giroscopio & Pedales</div>
+            </div>
+        </div>
+
+        <div class="watermark">By <span>ElproFEsor</span></div>
+    </div>
+
+    <!-- SCREEN 2: GAMEPAD -->
+    <div id="screen-gamepad" class="screen">
+        <div class="editor-grid" id="editor-grid"></div>
+
+        <div class="top-toolbar" id="toolbar">
+            <div class="status-badge" id="hud-status"><span class="dot"></span> <span id="hud-title">Modo Prueba</span>
+            </div>
+
+            <div id="test-controls" style="display: flex; gap: 10px; align-items: center;">
+                <button class="btn btn-outline" onclick="setMode('edit')">⚙️ Editar HUD</button>
+                <button class="btn btn-primary" onclick="connectToPC()">Conectar PC ➔</button>
+                <button class="btn btn-outline" onclick="toggleSettings()"
+                    style="padding:6px 12px; border-radius:50%;">⚙️</button>
+            </div>
+
+            <div id="edit-controls" style="display: none; gap: 10px;">
+                <button class="btn btn-outline" onclick="resetLayoutToDefault()">↺ Restaurar Original</button>
+                <button class="btn btn-primary" onclick="saveLayoutAndExit()">✓ Guardar Layout</button>
+            </div>
+        </div>
+
+        <div class="settings-modal" id="settings-modal">
+            <div class="settings-title">Fuerza de Vibración</div>
+            <div class="haptic-opts">
+                <button class="opt-btn" onclick="setHapticLvl(0)">OFF</button>
+                <button class="opt-btn" onclick="setHapticLvl(0.5)">Suave</button>
+                <button class="opt-btn active" onclick="setHapticLvl(1)">Media</button>
+                <button class="opt-btn" onclick="setHapticLvl(2)">Fuerte</button>
+            </div>
+        </div>
+
+        <div class="scale-panel" id="scale-panel">
+            <span style="color:white; font-size:0.9rem; font-weight:bold;">TAMAÑO BOTÓN:</span>
+            <input type="range" id="size-slider" min="0.5" max="2" step="0.1" value="1">
+            <span id="scale-value">1.0x</span>
+        </div>
+
+        <div class="gamepad-container state-test" id="gamepad-area">
+
+            <!-- ====== ESTÁNDAR ====== -->
+            <div class="gp-element standard-el" id="el-lstick" data-id="lstick">
+                <div class="analog-stick">
+                    <div class="analog-thumb" id="thumb-l"></div>
+                </div>
+            </div>
+            <div class="gp-element standard-el" id="el-rstick" data-id="rstick">
+                <div class="analog-stick">
+                    <div class="analog-thumb" id="thumb-r"></div>
+                </div>
+            </div>
+            <div class="gp-element standard-el" id="el-dpad" data-id="dpad">
+                <div class="dpad">
+                    <div class="d-btn d-center"></div>
+                    <div class="d-btn d-up interactive-btn">▲</div>
+                    <div class="d-btn d-down interactive-btn">▼</div>
+                    <div class="d-btn d-left interactive-btn">◀</div>
+                    <div class="d-btn d-right interactive-btn">▶</div>
+                </div>
+            </div>
+
+            <div class="gp-element standard-el" id="el-btn-top" data-id="btn-top">
+                <div class="act-btn act-top interactive-btn" id="lbl-top" style="position:relative; left:0; top:0;">Y
+                </div>
+            </div>
+            <div class="gp-element standard-el" id="el-btn-bot" data-id="btn-bot">
+                <div class="act-btn act-bottom interactive-btn" id="lbl-bot" style="position:relative; left:0; top:0;">A
+                </div>
+            </div>
+            <div class="gp-element standard-el" id="el-btn-left" data-id="btn-left">
+                <div class="act-btn act-left interactive-btn" id="lbl-left" style="position:relative; left:0; top:0;">X
+                </div>
+            </div>
+            <div class="gp-element standard-el" id="el-btn-right" data-id="btn-right">
+                <div class="act-btn act-right interactive-btn" id="lbl-right" style="position:relative; left:0; top:0;">
+                    B</div>
+            </div>
+
+            <div class="gp-element standard-el" id="el-l1" data-id="l1">
+                <div class="shoulder-group interactive-btn" id="lbl-l1">L1</div>
+            </div>
+            <div class="gp-element standard-el" id="el-r1" data-id="r1">
+                <div class="shoulder-group interactive-btn" id="lbl-r1">R1</div>
+            </div>
+            <div class="gp-element standard-el" id="el-l2" data-id="l2">
+                <div class="shoulder-group interactive-btn" id="lbl-l2">L2</div>
+            </div>
+            <div class="gp-element standard-el" id="el-r2" data-id="r2">
+                <div class="shoulder-group interactive-btn" id="lbl-r2">R2</div>
+            </div>
+            <div class="gp-element standard-el" id="el-l3" data-id="l3">
+                <div class="stick-btn-group interactive-btn" id="lbl-l3">L3</div>
+            </div>
+            <div class="gp-element standard-el" id="el-r3" data-id="r3">
+                <div class="stick-btn-group interactive-btn" id="lbl-r3">R3</div>
+            </div>
+
+            <!-- ====== RACING ====== -->
+            <div class="gp-element racing-el" id="el-steer-left" data-id="steer-left">
+                <div class="steer-btn interactive-btn">◀</div>
+            </div>
+            <div class="gp-element racing-el" id="el-steer-right" data-id="steer-right">
+                <div class="steer-btn interactive-btn">▶</div>
+            </div>
+
+            <!-- Pedales y Cambios -->
+            <div class="gp-element racing-el" id="el-gas" data-id="gas">
+                <div class="pedal-btn pedal-gas interactive-btn"><svg viewBox="0 0 24 24">
+                        <rect x="6" y="2" width="12" height="20" rx="2" />
+                        <line x1="10" y1="6" x2="14" y2="6" />
+                        <line x1="10" y1="12" x2="14" y2="12" />
+                        <line x1="10" y1="18" x2="14" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="gp-element racing-el" id="el-brake" data-id="brake">
+                <div class="pedal-btn pedal-brake interactive-btn"><svg viewBox="0 0 24 24">
+                        <rect x="4" y="6" width="16" height="12" rx="2" />
+                        <line x1="8" y1="10" x2="16" y2="10" />
+                        <line x1="8" y1="14" x2="16" y2="14" />
+                    </svg></div>
+            </div>
+            <div class="gp-element racing-el" id="el-gear-up" data-id="gear-up">
+                <div class="gear-btn interactive-btn">△</div>
+            </div>
+            <div class="gp-element racing-el" id="el-gear-down" data-id="gear-down">
+                <div class="gear-btn interactive-btn">▽</div>
+            </div>
+
+            <!-- Freno de Mano y Extras -->
+            <div class="gp-element racing-el" id="el-handbrake" data-id="handbrake">
+                <div class="act-btn interactive-btn handbrake-icon"
+                    style="width: 55px; height: 55px; position:relative; top:0; left:0;"><svg viewBox="0 0 24 24">
+                        <path d="M12 22v-8" />
+                        <path d="M12 14c-2.5 0-6-2-6-6s3.5-6 6-6 6 2 6 6-3.5 6-6 6z" />
+                        <path d="M12 2v4" />
+                    </svg></div>
+            </div>
+            <div class="gp-element racing-el" id="el-nitrous" data-id="nitrous">
+                <div class="act-btn interactive-btn" style="position:relative; top:0; left:0;">N2O</div>
+            </div>
+            <div class="gp-element racing-el" id="el-cam" data-id="cam">
+                <div class="stick-btn-group interactive-btn">📷</div>
+            </div>
+            <div class="gp-element racing-el" id="el-horn" data-id="horn">
+                <div class="stick-btn-group interactive-btn">📯</div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SCREEN 3: CONECTANDO -->
+    <div id="screen-connect" class="screen">
+        <div class="radar">
+            <h2 style="color: var(--theme-glow); transition: color 0.5s;">B T</h2>
+        </div>
+        <h2 style="margin-bottom: 10px;">Buscando PC Host...</h2>
+        <p style="color: var(--text-muted);" id="connect-log">Iniciando protocolo HID Bluetooth</p>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // --- 1. CONFIGURACIONES DE ALINEACIÓN PERFECTA ---
+        const defaultLayouts = {
+            ps: {
+                l2: { cx: 20, cy: 15, ox: 0, oy: 0, s: 0.9 }, r2: { cx: 80, cy: 15, ox: 0, oy: 0, s: 0.9 },
+                l1: { cx: 20, cy: 30, ox: 0, oy: 0, s: 0.9 }, r1: { cx: 80, cy: 30, ox: 0, oy: 0, s: 0.9 },
+                dpad: { cx: 20, cy: 65, ox: 0, oy: 0, s: 1 }, lstick: { cx: 38, cy: 80, ox: 0, oy: 0, s: 0.9 }, rstick: { cx: 62, cy: 80, ox: 0, oy: 0, s: 0.9 },
+                l3: { cx: 38, cy: 60, ox: 0, oy: 0, s: 0.8 }, r3: { cx: 62, cy: 60, ox: 0, oy: 0, s: 0.8 },
+                'btn-top': { cx: 80, cy: 65, ox: 0, oy: -55, s: 1 }, 'btn-bot': { cx: 80, cy: 65, ox: 0, oy: 55, s: 1 },
+                'btn-left': { cx: 80, cy: 65, ox: -55, oy: 0, s: 1 }, 'btn-right': { cx: 80, cy: 65, ox: 55, oy: 0, s: 1 }
+            },
+            xbox: {
+                l2: { cx: 20, cy: 15, ox: 0, oy: 0, s: 0.9 }, r2: { cx: 80, cy: 15, ox: 0, oy: 0, s: 0.9 },
+                l1: { cx: 20, cy: 30, ox: 0, oy: 0, s: 0.9 }, r1: { cx: 80, cy: 30, ox: 0, oy: 0, s: 0.9 },
+                lstick: { cx: 20, cy: 55, ox: 0, oy: 0, s: 1 }, dpad: { cx: 38, cy: 80, ox: 0, oy: 0, s: 1 }, rstick: { cx: 62, cy: 80, ox: 0, oy: 0, s: 0.9 },
+                l3: { cx: 20, cy: 80, ox: 0, oy: 0, s: 0.8 }, r3: { cx: 80, cy: 80, ox: 0, oy: 0, s: 0.8 },
+                'btn-top': { cx: 80, cy: 55, ox: 0, oy: -55, s: 1 }, 'btn-bot': { cx: 80, cy: 55, ox: 0, oy: 55, s: 1 },
+                'btn-left': { cx: 80, cy: 55, ox: -55, oy: 0, s: 1 }, 'btn-right': { cx: 80, cy: 55, ox: 55, oy: 0, s: 1 }
+            },
+            generic: {
+                l2: { cx: 20, cy: 15, ox: 0, oy: 0, s: 0.9 }, r2: { cx: 80, cy: 15, ox: 0, oy: 0, s: 0.9 },
+                l1: { cx: 20, cy: 30, ox: 0, oy: 0, s: 0.9 }, r1: { cx: 80, cy: 30, ox: 0, oy: 0, s: 0.9 },
+                dpad: { cx: 20, cy: 70, ox: 0, oy: 0, s: 1.1 }, lstick: { cx: 40, cy: 70, ox: 0, oy: 0, s: 0.9 },
+                rstick: { cx: -10, cy: -10, ox: 0, oy: 0, s: 0 }, l3: { cx: -10, cy: -10, ox: 0, oy: 0, s: 0 }, r3: { cx: -10, cy: -10, ox: 0, oy: 0, s: 0 },
+                'btn-top': { cx: 80, cy: 70, ox: 0, oy: -60, s: 1.1 }, 'btn-bot': { cx: 80, cy: 70, ox: 0, oy: 60, s: 1.1 },
+                'btn-left': { cx: 80, cy: 70, ox: -60, oy: 0, s: 1.1 }, 'btn-right': { cx: 80, cy: 70, ox: 60, oy: 0, s: 1.1 }
+            },
+            racing: {
+                'steer-left': { cx: 10, cy: 80, ox: 0, oy: 0, s: 1 }, 'steer-right': { cx: 20, cy: 80, ox: 0, oy: 0, s: 1 },
+                gas: { cx: 90, cy: 80, ox: 0, oy: 0, s: 1.1 }, brake: { cx: 78, cy: 80, ox: 0, oy: 0, s: 1.1 },
+                'gear-up': { cx: 85, cy: 60, ox: 0, oy: 0, s: 1 }, 'gear-down': { cx: 85, cy: 70, ox: 0, oy: 0, s: 1 },
+                handbrake: { cx: 90, cy: 50, ox: 0, oy: 0, s: 1 }, nitrous: { cx: 90, cy: 35, ox: 0, oy: 0, s: 0.9 },
+                cam: { cx: 15, cy: 20, ox: 0, oy: 0, s: 1 }, horn: { cx: 10, cy: 45, ox: 0, oy: 0, s: 1 }
+            }
+        };
+
+        let currentType = 'init';
+        let appState = 'test';
+        let activeElement = null;
+        let currentRgbGlow = '170, 85, 255'; // Restaurado al morado neón
+
+        let hapticLvl = parseFloat(localStorage.getItem('gb_haptic_lvl')) ?? 1;
+        const setHapticLvl = (lvl) => { hapticLvl = lvl; localStorage.setItem('gb_haptic_lvl', lvl); document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active')); event.target.classList.add('active'); if (lvl > 0) navigator.vibrate(20 * lvl); };
+        const hapticUI = (ms = 10) => { if (navigator.vibrate && hapticLvl > 0) navigator.vibrate(ms * hapticLvl); };
+        const toggleSettings = () => { document.getElementById('settings-modal').classList.toggle('active'); };
+        const showScreen = (id) => { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); };
+
+        // --- 2. SISTEMA DE PARTÍCULAS ---
+        const canvas = document.getElementById('bg-canvas'); const ctx = canvas.getContext('2d'); let particles = [];
+        const resizeCanvas = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+        class Particle {
+            constructor() { this.reset(true); }
+            reset(randY = false) { this.x = Math.random() * canvas.width; this.y = randY ? Math.random() * canvas.height : canvas.height + Math.random() * 50; this.size = Math.random() * 2 + 0.5; this.speedY = -(Math.random() * 0.8 + 0.2); this.speedX = (Math.random() - 0.5) * 0.8; this.opacity = Math.random() * 0.5 + 0.1; }
+            update() { this.y += this.speedY; this.x += this.speedX; this.opacity -= 0.0015; if (this.y < -10 || this.opacity <= 0) this.reset(); }
+            draw() { ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fillStyle = `rgba(${currentRgbGlow}, ${this.opacity})`; ctx.fill(); }
+        }
+        for (let i = 0; i < 60; i++) particles.push(new Particle());
+        const animateParticles = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(); p.draw(); }); requestAnimationFrame(animateParticles); };
+        animateParticles();
+
+        // --- 3. GESTIÓN DE LAYOUTS ---
+        const startSetup = (type) => {
+            hapticUI(30); currentType = type; document.body.className = `theme-${type}`;
+            setTimeout(() => { currentRgbGlow = getComputedStyle(document.body).getPropertyValue('--rgb-glow').trim() || '255,255,255'; }, 50);
+
+            if (type !== 'racing') {
+                const labels = { ps: ['△', '✕', '◻', '◯', 'L1', 'R1', 'L2', 'R2', 'L3', 'R3'], xbox: ['Y', 'A', 'X', 'B', 'LB', 'RB', 'LT', 'RT', 'LS', 'RS'], generic: ['1', '2', '3', '4', 'L', 'R', 'ZL', 'ZR', 'LC', 'RC'] }[type];
+                ['top', 'bot', 'left', 'right', 'l1', 'r1', 'l2', 'r2', 'l3', 'r3'].forEach((id, i) => document.getElementById(`lbl-${id}`).innerText = labels[i]);
+            }
+            loadLayout(); setMode('test'); showScreen('screen-gamepad');
+        };
+
+        const applyLayoutData = (layoutData) => {
+            Object.keys(layoutData).forEach(key => {
+                const el = document.getElementById(`el-${key}`);
+                if (el) {
+                    el.style.left = `calc(${layoutData[key].cx}vw + ${layoutData[key].ox}px - ${el.offsetWidth / 2}px)`;
+                    el.style.top = `calc(${layoutData[key].cy}vh + ${layoutData[key].oy}px - ${el.offsetHeight / 2}px)`;
+                    el.style.transform = `scale(${layoutData[key].s})`;
+                    el.dataset.scale = layoutData[key].s;
+                }
+            });
+        };
+
+        const loadLayout = () => {
+            const saved = localStorage.getItem('gb_layout_' + currentType);
+            if (saved) applyLayoutData(JSON.parse(saved)); else applyLayoutData(defaultLayouts[currentType]);
+        };
+
+        const resetLayoutToDefault = () => { hapticUI(20); applyLayoutData(defaultLayouts[currentType]); deselectElement(); };
+
+        const saveLayoutAndExit = () => {
+            const currentLayoutData = {};
+            document.querySelectorAll('.gp-element').forEach(el => {
+                const rect = el.getBoundingClientRect();
+                const xVw = ((rect.left + rect.width / 2) / window.innerWidth) * 100;
+                const yVh = ((rect.top + rect.height / 2) / window.innerHeight) * 100;
+                currentLayoutData[el.dataset.id] = { cx: xVw, cy: yVh, ox: 0, oy: 0, s: parseFloat(el.dataset.scale) || 1 };
+            });
+            localStorage.setItem('gb_layout_' + currentType, JSON.stringify(currentLayoutData));
+            hapticUI([20, 40]); setMode('test');
+        };
+
+        const setMode = (mode) => {
+            hapticUI(15); appState = mode;
+            document.getElementById('gamepad-area').className = `gamepad-container state-${mode}`;
+            deselectElement(); document.getElementById('settings-modal').classList.remove('active');
+
+            if (mode === 'test') {
+                document.getElementById('hud-title').innerText = 'Modo Prueba';
+                document.getElementById('test-controls').style.display = 'flex';
+                document.getElementById('edit-controls').style.display = 'none';
+            } else if (mode === 'edit') {
+                document.getElementById('hud-title').innerText = 'Editor HUD';
+                document.getElementById('test-controls').style.display = 'none';
+                document.getElementById('edit-controls').style.display = 'flex';
+            }
+        };
+
+        // --- 4. DRAG & DROP Y ESCALADO ---
+        const gamepadArea = document.getElementById('gamepad-area');
+        const elements = document.querySelectorAll('.gp-element');
+        const scalePanel = document.getElementById('scale-panel');
+        const slider = document.getElementById('size-slider');
+        const scaleValue = document.getElementById('scale-value');
+
+        let isDragging = false; let dragOffset = { x: 0, y: 0 };
+        const deselectElement = () => { elements.forEach(el => el.classList.remove('selected')); scalePanel.classList.remove('active'); activeElement = null; };
+
+        elements.forEach(el => {
+            el.addEventListener('touchstart', (e) => {
+                if (appState !== 'edit') return;
+                e.preventDefault(); e.stopPropagation(); hapticUI(15); deselectElement();
+
+                activeElement = el; el.classList.add('selected'); scalePanel.classList.add('active');
+                slider.value = el.dataset.scale || 1;
+                scaleValue.innerText = `${parseFloat(slider.value).toFixed(1)}x`;
+
+                const touch = e.touches[0]; const rect = el.getBoundingClientRect();
+                dragOffset.x = touch.clientX - (rect.left + rect.width / 2); dragOffset.y = touch.clientY - (rect.top + rect.height / 2);
+                isDragging = true;
+            }, { passive: false });
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging || !activeElement || appState !== 'edit') return;
+            e.preventDefault(); const touch = e.touches[0];
+            activeElement.style.left = `${touch.clientX - dragOffset.x - activeElement.offsetWidth / 2}px`;
+            activeElement.style.top = `${touch.clientY - dragOffset.y - activeElement.offsetHeight / 2}px`;
+        }, { passive: false });
+        document.addEventListener('touchend', () => { if (isDragging) { hapticUI(10); isDragging = false; } });
+
+        slider.addEventListener('input', (e) => {
+            if (!activeElement) return;
+            scaleValue.innerText = `${parseFloat(e.target.value).toFixed(1)}x`;
+            activeElement.style.transform = `scale(${e.target.value})`;
+            activeElement.dataset.scale = e.target.value;
+        });
+
+        gamepadArea.addEventListener('touchstart', (e) => { if (appState === 'edit' && e.target === gamepadArea) deselectElement(); });
+
+        // --- 5. FÍSICA ANALÓGICA DE LOS JOYSTICKS ---
+        const setupAnalogStick = (baseId, thumbId) => {
+            const base = document.getElementById(baseId); const thumb = document.getElementById(thumbId);
+            if (!base || !thumb) return;
+            let stickActive = false; let touchId = null; const maxRadius = 35;
+
+            base.addEventListener('touchstart', (e) => {
+                if (appState === 'edit') return;
+                e.preventDefault(); e.stopPropagation(); hapticUI(15);
+                const touch = e.changedTouches[0]; touchId = touch.identifier; stickActive = true;
+                thumb.classList.add('active-visual'); updateStickPosition(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            const updateStickPosition = (clientX, clientY) => {
+                const rect = base.getBoundingClientRect();
+                let dx = clientX - (rect.left + rect.width / 2); let dy = clientY - (rect.top + rect.height / 2);
+                let distance = Math.hypot(dx, dy);
+                if (distance > maxRadius) { dx = (dx / distance) * maxRadius; dy = (dy / distance) * maxRadius; }
+                thumb.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            base.addEventListener('touchmove', (e) => {
+                if (!stickActive || appState === 'edit') return;
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === touchId) { updateStickPosition(e.changedTouches[i].clientX, e.changedTouches[i].clientY); break; } }
+            }, { passive: false });
+
+            const releaseStick = () => { stickActive = false; touchId = null; thumb.style.transform = `translate(0px, 0px)`; thumb.classList.remove('active-visual'); };
+            base.addEventListener('touchend', (e) => { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === touchId) releaseStick(); } });
+            base.addEventListener('touchcancel', releaseStick);
+        };
+        setupAnalogStick('el-lstick', 'thumb-l'); setupAnalogStick('el-rstick', 'thumb-r');
+
+        // --- 6. BOTONES SIMPLES (Prueba y Juego) ---
+        document.querySelectorAll('.interactive-btn').forEach(btn => {
+            btn.addEventListener('touchstart', (e) => { if (appState === 'edit') return; e.preventDefault(); e.stopPropagation(); hapticUI(20); btn.classList.add('active'); }, { passive: false });
+            btn.addEventListener('touchend', (e) => { if (appState === 'edit') return; e.preventDefault(); btn.classList.remove('active'); }, { passive: false });
+            btn.addEventListener('touchcancel', () => btn.classList.remove('active'));
+        });
+
+        // --- 7. CONEXIÓN ---
+        const connectToPC = () => {
+            hapticUI(40); document.getElementById('settings-modal').classList.remove('active'); showScreen('screen-connect');
+            setTimeout(() => document.getElementById('connect-log').innerText = currentType === 'racing' ? "Iniciando Giroscopio..." : "Sincronizando Layout...", 1000);
+            setTimeout(() => { hapticUI([30, 50, 30]); setMode('play'); showScreen('screen-gamepad'); }, 2500);
+        };
+    </script>
+</body>
+
+</html>
