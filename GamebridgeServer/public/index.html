@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameBridge PC Server</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --panel: #161b22;
+            --accent: #238636;
+            --accent-glow: rgba(35, 134, 54, 0.4);
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --border: #30363d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        .dashboard { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 600px; padding: 30px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .header { display: flex; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 30px; }
+        .icon { font-size: 2.5rem; margin-right: 15px; }
+        .title { flex: 1; }
+        .title h1 { font-size: 1.5rem; font-weight: 600; color: white; }
+        .title p { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; }
+        .status-badge { background: rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff4444; box-shadow: 0 0 10px rgba(255,68,68,0.6); }
+        .status-dot.active { background: #00e676; box-shadow: 0 0 10px rgba(0,230,118,0.6); }
+        
+        .ip-card { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px; }
+        .ip-card h3 { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .ip-address { font-size: 2.5rem; font-weight: 700; color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); user-select: all; font-family: monospace; }
+        
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .info-box { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
+        .info-box.driver-ok { border-color: rgba(0,230,118,0.3); }
+        .info-box.driver-err { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.05); }
+        .box-title { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+        .box-val { font-size: 1.1rem; font-weight: 600; color: white; }
+
+        /* Modal Testing PES Style */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 30px; width: 500px; max-width: 90%; text-align: center; }
+        .close-btn { background: #ff4444; border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; float: right; font-weight: bold; }
+        .test-btn { background: var(--accent); color: white; border: none; padding: 12px 15px; border-radius: 6px; margin-top: 20px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1rem; transition: background 0.2s;}
+        .test-btn:hover { background: #2ea043; }
+        
+        .gamepad-visual { position: relative; width: 300px; height: 180px; background: #21262d; border-radius: 90px; margin: 30px auto; border: 2px solid var(--border); overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);}
+        .g-btn { position: absolute; width: 24px; height: 24px; background: #30363d; border-radius: 50%; border: 1px solid #111; transition: background 0.1s, box-shadow 0.1s; }
+        .g-btn.on { background: #00e676; box-shadow: 0 0 10px #00e676; border-color: white;}
+        /* Positions */
+        .g-a { bottom: 40px; right: 50px; }
+        .g-b { bottom: 65px; right: 25px; }
+        .g-x { bottom: 65px; right: 75px; }
+        .g-y { bottom: 90px; right: 50px; }
+        
+        .g-dpad { position: absolute; bottom: 40px; left: 40px; width: 60px; height: 60px; }
+        .g-dpad-part { position: absolute; width: 20px; height: 20px; background: #30363d; transition: background 0.1s; border: 1px solid #111;}
+        .g-dpad-part.on { background: #00e676; box-shadow: 0 0 10px #00e676; }
+        .g-up { top: 0; left: 20px; } .g-down { bottom: 0; left: 20px; } .g-left { top: 20px; left: 0; } .g-right { top: 20px; right: 0; }
+        
+        .g-stick { position:absolute; width: 50px; height: 50px; background: #161b22; border-radius: 50%; border: 3px solid #444; }
+        .g-stick-thumb { position:absolute; width: 24px; height: 24px; background: #555; border-radius: 50%; top:10px; left:10px; transition: transform 0.05s ease-out;}
+        .g-ls { bottom: 40px; left: 110px; }
+        .g-rs { bottom: 25px; right: 110px; }
+        
+        .g-trigger { position: absolute; top: -10px; width: 70px; height: 30px; background: #30363d; border-radius: 10px 10px 0 0; transition: background 0.1s; border: 1px solid #111; z-index:0; }
+        .g-trigger.on { background: #00e676; box-shadow: 0 -5px 20px #00e676;}
+        .g-lt { left: 50px; } .g-rt { right: 50px; }
+        
+        .g-bumper { position: absolute; top: 15px; width: 80px; height: 18px; background: #21262d; border-radius: 5px; transition: background 0.1s; border: 1px solid #111; z-index:1;}
+        .g-bumper.on { background: #00e676; box-shadow: 0 0 10px #00e676;}
+        .g-lb { left: 45px; } .g-rb { right: 45px; }
+
+        /* Xbox Theme Layout (Asymmetric, Black) */
+        body.theme-xbox .gamepad-visual { 
+            border-radius: 100px 100px 140px 140px / 80px 80px 200px 200px; 
+            border-top: 2px solid #333;
+            background: radial-gradient(circle at 50% 30%, #262c33 0%, #0d1014 100%);
+            box-shadow: 0 20px 30px rgba(0,0,0,0.8), inset 0 -15px 20px rgba(0,0,0,0.9);
+            width: 340px; height: 210px; z-index: 10;
+        }
+        body.theme-xbox .gamepad-visual::before {
+            content: 'XBOX'; position: absolute; top: 35px; left: 50%; transform: translateX(-50%);
+            color: #444; font-weight: 900; letter-spacing: 2px; font-size: 10px;
+        }
+        body.theme-xbox .g-ls { top: 60px; left: 50px; }
+        body.theme-xbox .g-dpad { top: 110px; left: 120px; }
+        body.theme-xbox .g-dpad-part { background: #111; border-color: #222; }
+        body.theme-xbox .g-rs { top: 110px; right: 90px; }
+        
+        /* XYAB Buttons XBOX */
+        body.theme-xbox .g-btn { background: #111; border: 2px solid #222; }
+        body.theme-xbox .g-y { top: 50px; right: 65px; }
+        body.theme-xbox .g-b { top: 75px; right: 40px; }
+        body.theme-xbox .g-a { top: 100px; right: 65px; }
+        body.theme-xbox .g-x { top: 75px; right: 90px; }
+        
+        body.theme-xbox .g-a::after { content: 'A'; color: #00e676; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-xbox .g-b::after { content: 'B'; color: #ff4444; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-xbox .g-x::after { content: 'X'; color: #2c82ff; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-xbox .g-y::after { content: 'Y'; color: #ffae00; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-xbox .g-btn.on { background: #00e676; box-shadow: 0 0 15px #00e676; border-color:#fff; }
+        body.theme-xbox .g-btn.on::after { color: #000; }
+        body.theme-xbox .g-dpad-part.on, body.theme-xbox .g-trigger.on, body.theme-xbox .g-bumper.on { background: #00e676; box-shadow: 0 0 10px #00e676; border-color:#fff; }
+
+        /* PlayStation Theme Layout (DualSense PS5 - Symmetrical, White/Black) */
+        body.theme-ps .gamepad-visual { 
+            border-radius: 80px 80px 130px 130px / 60px 60px 220px 220px; 
+            background: linear-gradient(180deg, #f0f2f5 0%, #d1d5da 60%, #161b22 61%, #000 100%);
+            box-shadow: 0 20px 30px rgba(0,0,0,0.8), inset 0 5px 15px white;
+            border: none;
+            width: 360px; height: 220px; z-index: 10;
+        }
+        body.theme-ps .gamepad-visual::before {
+            content: ''; position: absolute; top: 25px; left: 50%; transform: translateX(-50%);
+            width: 140px; height: 75px; background: rgba(0,0,0,0.05); border-radius: 15px; border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        body.theme-ps .g-dpad { top: 60px; left: 45px; }
+        body.theme-ps .g-dpad-part { background: transparent; border: none; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); }
+        body.theme-ps .g-dpad-part.on { background: #2c82ff; box-shadow: 0 0 15px #2c82ff; }
+        body.theme-ps .g-ls { top: 120px; left: 105px; border-color:#000; background:#222;}
+        body.theme-ps .g-rs { top: 120px; right: 105px; border-color:#000; background:#222;}
+        
+        body.theme-ps .g-btn { background: transparent; border: 1px solid rgba(0,0,0,0.2); box-shadow: inset 0 0 5px rgba(0,0,0,0.1); }
+        body.theme-ps .g-y { top: 50px; right: 65px; }
+        body.theme-ps .g-b { top: 75px; right: 40px; }
+        body.theme-ps .g-a { top: 100px; right: 65px; }
+        body.theme-ps .g-x { top: 75px; right: 90px; }
+
+        body.theme-ps .g-btn.on, body.theme-ps .g-trigger.on, body.theme-ps .g-bumper.on { background: #2c82ff; box-shadow: 0 0 20px #2c82ff, inset 0 0 10px #fff; border-color: white;}
+        body.theme-ps .g-a::after { content: '✕'; color: #111; position:absolute; top:2px; left:7px; font-size:13px; font-weight: bold;}
+        body.theme-ps .g-b::after { content: '◯'; color: #ff3366; position:absolute; top:2px; left:6px; font-size:13px; font-weight: bold;}
+        body.theme-ps .g-x::after { content: '◻'; color: #cc66ff; position:absolute; top:2px; left:7px; font-size:13px; font-weight: bold;}
+        body.theme-ps .g-y::after { content: '△'; color: #00cccc; position:absolute; top:2px; left:7px; font-size:13px; font-weight: bold;}
+        
+        body.theme-ps .g-trigger { background: #e0e0e0; border-color: #ccc; }
+        body.theme-ps .g-bumper { background: #f0f0f0; border-color: #ddd; }
+
+        /* Generic Theme overrides */
+        body.theme-generic .gamepad-visual { border-radius: 40px; background: #23160a; border-top: 5px solid #ff9100; }
+        body.theme-generic .g-btn.on, body.theme-generic .g-dpad-part.on, body.theme-generic .g-trigger.on, body.theme-generic .g-bumper.on { background: #ff9100; box-shadow: 0 0 10px #ff9100; border-color: white;}
+        body.theme-generic .g-a::after { content: '2'; color: white; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-generic .g-b::after { content: '3'; color: white; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-generic .g-x::after { content: '1'; color: white; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+        body.theme-generic .g-y::after { content: '4'; color: white; position:absolute; top:2px; left:8px; font-size:12px; font-weight: bold;}
+    </style>
+</head>
+<body class="theme-xbox">
+
+<div class="dashboard">
+    <div class="header">
+        <div class="icon">🎮</div>
+        <div class="title">
+            <h1>GameBridge PC Server</h1>
+            <p>UDP Socket Bridge & Virtual Gamepad</p>
+        </div>
+        <div class="status-badge" id="conn-badge">
+            <div class="status-dot" id="conn-dot"></div>
+            <span id="conn-text">Desconectado</span>
+        </div>
+    </div>
+
+    <div class="ip-card">
+        <h3>Tu Dirección IP Local</h3>
+        <div class="ip-address" id="ip-display">Cargando...</div>
+        <p style="margin-top:10px; font-size:0.9rem; color:var(--text-muted);">Ingresa esta numeración en la aplicación de tu celular</p>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-box" id="driver-box">
+            <div class="box-title">Driver ViGEmBus</div>
+            <div class="box-val" id="driver-val">Verificando...</div>
+        </div>
+        <div class="info-box">
+            <div class="box-title">Puerto Abierto</div>
+            <div class="box-val" style="color:var(--accent);">UDP 9090</div>
+        </div>
+    </div>
+
+    <button class="test-btn" onclick="openTestModal()">🎮 Probar Controles</button>
+
+    <div style="margin-top:25px; font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
+        <strong>Instrucciones:</strong><br>
+        1. Asegúrate que tu PC y Celular estén conectados al mismo Wi-Fi.<br>
+        2. En tu Celular, abre GameBridge y ve al modo Emparejamiento.<br>
+        3. Escribe la IP de arriba y presiona "Conectar".<br>
+        4. Inicia tu juego (Steam, Forza, etc.). Ahora leerán tu celular como un control de Xbox original.
+    </div>
+</div>
+
+<!-- PES Style Test Modal -->
+<div class="modal" id="testModal">
+    <div class="modal-content">
+        <button class="close-btn" onclick="closeTestModal()">Cerrar</button>
+        <h2 style="margin-bottom: 5px; padding-top: 10px;">Diagnóstico de Mando</h2>
+        <p style="color:var(--text-muted); font-size:0.85rem;">Feedback instantáneo vía Servidor UDP</p>
+        
+        <div class="gamepad-visual-container" style="position:relative; width: 360px; height: 260px; margin: 30px auto;">
+            <div class="gamepad-visual" style="position:absolute; top:20px; left:0;">
+                <div class="g-trigger g-lt" id="vi-lt"></div><div class="g-trigger g-rt" id="vi-rt"></div>
+                <div class="g-bumper g-lb" id="vi-lb"></div><div class="g-bumper g-rb" id="vi-rb"></div>
+                
+                <div class="g-dpad">
+                    <div class="g-dpad-part g-up" id="vi-up"></div>
+                    <div class="g-dpad-part g-down" id="vi-down"></div>
+                    <div class="g-dpad-part g-left" id="vi-left"></div>
+                    <div class="g-dpad-part g-right" id="vi-right"></div>
+                </div>
+                
+                <div class="g-stick g-ls"><div class="g-stick-thumb" id="vi-ls"></div></div>
+                <div class="g-stick g-rs"><div class="g-stick-thumb" id="vi-rs"></div></div>
+                
+                <div class="g-btn g-y" id="vi-y"></div>
+                <div class="g-btn g-b" id="vi-b"></div>
+                <div class="g-btn g-a" id="vi-a"></div>
+                <div class="g-btn g-x" id="vi-x"></div>
+            </div>
+        </div>
+        
+        <p style="color:#ffae00; font-size:0.85rem; font-weight:bold; margin-top:20px;">Nota: Esta pantalla consume recursos del servidor. Ciérrala cuando finalices las pruebas.</p>
+    </div>
+</div>
+
+<script>
+    function updateStatus() {
+        fetch('/api/status').then(r=>r.json()).then(data => {
+            document.getElementById('ip-display').innerText = data.ip;
+            
+            const dot = document.getElementById('conn-dot');
+            const txt = document.getElementById('conn-text');
+            if (data.connected) {
+                dot.classList.add('active');
+                txt.innerText = 'App Conectada';
+                document.querySelector('.ip-card').style.borderColor = 'rgba(0,230,118,0.4)';
+            } else {
+                dot.classList.remove('active');
+                txt.innerText = 'Esperando App...';
+                document.querySelector('.ip-card').style.borderColor = 'var(--border)';
+            }
+
+            const dbox = document.getElementById('driver-box');
+            const dval = document.getElementById('driver-val');
+            if (data.vigem) {
+                dbox.classList.add('driver-ok');
+                dbox.classList.remove('driver-err');
+                dval.innerText = 'Instalado ✓';
+                dval.style.color = '#00e676';
+            } else {
+                dbox.classList.add('driver-err');
+                dbox.classList.remove('driver-ok');
+                dval.innerText = 'No Encontrado';
+                dval.style.color = '#ff4444';
+            }
+        });
+    }
+
+    setInterval(updateStatus, 1000);
+    updateStatus();
+
+    // Testing Modal Logic (Only pools when opened)
+    let testingInterval = null;
+    function openTestModal() {
+        document.getElementById('testModal').classList.add('active');
+        testingInterval = setInterval(pullState, 33); // ~30fps
+    }
+    function closeTestModal() {
+        document.getElementById('testModal').classList.remove('active');
+        if (testingInterval) {
+            clearInterval(testingInterval);
+            testingInterval = null;
+        }
+    }
+    function pullState() {
+        fetch('/api/state')
+        .then(r => r.json())
+        .then(state => {
+            if (!state || Object.keys(state).length === 0) return;
+            
+            if (state.type) {
+                document.body.className = `theme-${state.type}`;
+            } else {
+                document.body.className = 'theme-xbox';
+            }
+
+            const setOn = (id, val) => {
+                const el = document.getElementById('vi-'+id);
+                if(val) el.classList.add('on'); else el.classList.remove('on');
+            };
+            
+            setOn('a', state.btn_a); setOn('b', state.btn_b); setOn('x', state.btn_x); setOn('y', state.btn_y);
+            setOn('lb', state.btn_l1); setOn('rb', state.btn_r1);
+            setOn('lt', state.lt > 0.5); setOn('rt', state.rt > 0.5);
+            
+            const dp = state.dpad || 0;
+            setOn('up', [1,2,8].includes(dp));
+            setOn('right', [2,3,4].includes(dp));
+            setOn('down', [4,5,6].includes(dp));
+            setOn('left', [6,7,8].includes(dp));
+            
+            const thumbOffset = 12; // max translation pixels for thumbstick
+            const ltx = (state.ls_x || 0) * thumbOffset; 
+            const lty = (state.ls_y || 0) * thumbOffset; 
+            document.getElementById('vi-ls').style.transform = `translate(${ltx}px, ${lty}px)`;
+            
+            const rtx = (state.rs_x || 0) * thumbOffset; 
+            const rty = (state.rs_y || 0) * thumbOffset;
+            document.getElementById('vi-rs').style.transform = `translate(${rtx}px, ${rty}px)`;
+        }).catch(e => { console.error("Error pulling state", e); });
+    }
+</script>
+
+</body>
+</html>
