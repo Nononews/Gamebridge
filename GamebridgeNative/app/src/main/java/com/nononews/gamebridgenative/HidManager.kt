@@ -17,12 +17,16 @@ import android.os.Build
 import android.util.Log
 import android.webkit.WebView
 import androidx.core.content.ContextCompat
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class HidManager(private val context: Context, private val webView: WebView) {
     private val TAG = "GamepadHID"
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var hidDevice: BluetoothHidDevice? = null
+    private var hidExecutor: ExecutorService? = null
+    private var serviceListener: BluetoothProfile.ServiceListener? = null
+    private var appRegistered = false
     var connectedHost: BluetoothDevice? = null
         private set
     private var targetDevice: BluetoothDevice? = null  // device we want to connect to
@@ -34,31 +38,46 @@ class HidManager(private val context: Context, private val webView: WebView) {
     val isConnected: Boolean
         get() = connectedHost != null && hidDevice != null
 
-    // HID Descriptor: Standard gamepad (16 buttons + 4 axes)
+    // HID Descriptor: Generic gamepad (16 buttons + D-pad hat + sticks + triggers)
     private val HID_DESCRIPTOR = byteArrayOf(
-        0x05.toByte(), 0x01.toByte(),
-        0x09.toByte(), 0x05.toByte(),
-        0xa1.toByte(), 0x01.toByte(),
-        0x85.toByte(), 0x01.toByte(),
-        0x05.toByte(), 0x09.toByte(),
-        0x19.toByte(), 0x01.toByte(),
-        0x29.toByte(), 0x10.toByte(),
-        0x15.toByte(), 0x00.toByte(),
-        0x25.toByte(), 0x01.toByte(),
-        0x75.toByte(), 0x01.toByte(),
-        0x95.toByte(), 0x10.toByte(),
-        0x81.toByte(), 0x02.toByte(),
-        0x05.toByte(), 0x01.toByte(),
-        0x09.toByte(), 0x30.toByte(),
-        0x09.toByte(), 0x31.toByte(),
-        0x09.toByte(), 0x32.toByte(),
-        0x09.toByte(), 0x35.toByte(),
-        0x15.toByte(), 0x00.toByte(),
-        0x26.toByte(), 0xff.toByte(), 0x00.toByte(),
-        0x75.toByte(), 0x08.toByte(),
-        0x95.toByte(), 0x04.toByte(),
-        0x81.toByte(), 0x02.toByte(),
-        0xc0.toByte()
+        0x05.toByte(), 0x01.toByte(),       // Usage Page (Generic Desktop)
+        0x09.toByte(), 0x05.toByte(),       // Usage (Game Pad)
+        0xa1.toByte(), 0x01.toByte(),       // Collection (Application)
+        0x85.toByte(), 0x01.toByte(),       //   Report ID (1)
+        0x05.toByte(), 0x09.toByte(),       //   Usage Page (Button)
+        0x19.toByte(), 0x01.toByte(),       //   Usage Minimum (1)
+        0x29.toByte(), 0x10.toByte(),       //   Usage Maximum (16)
+        0x15.toByte(), 0x00.toByte(),       //   Logical Minimum (0)
+        0x25.toByte(), 0x01.toByte(),       //   Logical Maximum (1)
+        0x75.toByte(), 0x01.toByte(),       //   Report Size (1)
+        0x95.toByte(), 0x10.toByte(),       //   Report Count (16)
+        0x81.toByte(), 0x02.toByte(),       //   Input (Data,Var,Abs)
+        0x05.toByte(), 0x01.toByte(),       //   Usage Page (Generic Desktop)
+        0x09.toByte(), 0x39.toByte(),       //   Usage (Hat switch)
+        0x15.toByte(), 0x00.toByte(),       //   Logical Minimum (0)
+        0x25.toByte(), 0x07.toByte(),       //   Logical Maximum (7)
+        0x35.toByte(), 0x00.toByte(),       //   Physical Minimum (0)
+        0x46.toByte(), 0x3b.toByte(), 0x01.toByte(), // Physical Maximum (315)
+        0x65.toByte(), 0x14.toByte(),       //   Unit (English Rotation, Degrees)
+        0x75.toByte(), 0x04.toByte(),       //   Report Size (4)
+        0x95.toByte(), 0x01.toByte(),       //   Report Count (1)
+        0x81.toByte(), 0x42.toByte(),       //   Input (Data,Var,Abs,Null)
+        0x65.toByte(), 0x00.toByte(),       //   Unit (None)
+        0x75.toByte(), 0x04.toByte(),       //   Report Size (4)
+        0x95.toByte(), 0x01.toByte(),       //   Report Count (1)
+        0x81.toByte(), 0x03.toByte(),       //   Input (Const,Var,Abs)
+        0x09.toByte(), 0x30.toByte(),       //   Usage (X)
+        0x09.toByte(), 0x31.toByte(),       //   Usage (Y)
+        0x09.toByte(), 0x33.toByte(),       //   Usage (Rx)
+        0x09.toByte(), 0x34.toByte(),       //   Usage (Ry)
+        0x09.toByte(), 0x32.toByte(),       //   Usage (Z)
+        0x09.toByte(), 0x35.toByte(),       //   Usage (Rz)
+        0x15.toByte(), 0x00.toByte(),       //   Logical Minimum (0)
+        0x26.toByte(), 0xff.toByte(), 0x00.toByte(), // Logical Maximum (255)
+        0x75.toByte(), 0x08.toByte(),       //   Report Size (8)
+        0x95.toByte(), 0x06.toByte(),       //   Report Count (6)
+        0x81.toByte(), 0x02.toByte(),       //   Input (Data,Var,Abs)
+        0xc0.toByte()                       // End Collection
     )
 
     // BroadcastReceiver to catch discovered Bluetooth devices
@@ -96,14 +115,22 @@ class HidManager(private val context: Context, private val webView: WebView) {
     fun hasPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
         } else {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
     }
 
     @SuppressLint("MissingPermission")
     fun start() {
+        if (!hasPermissions()) {
+            notifyJS("window.onBluetoothError && window.onBluetoothError('NO_PERMISSIONS_GRANTED')")
+            return
+        }
+
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null || !bluetoothAdapter!!.isEnabled) {
             Log.e(TAG, "Bluetooth no disponible o desactivado")
@@ -119,7 +146,9 @@ class HidManager(private val context: Context, private val webView: WebView) {
             Log.w(TAG, "Could not rename adapter: ${e.message}")
         }
 
-        bluetoothAdapter!!.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
+        cleanupHidRegistration()
+
+        val listener = object : BluetoothProfile.ServiceListener {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                 if (profile == BluetoothProfile.HID_DEVICE) {
                     hidDevice = proxy as BluetoothHidDevice
@@ -131,11 +160,18 @@ class HidManager(private val context: Context, private val webView: WebView) {
                     hidDevice = null
                 }
             }
-        }, BluetoothProfile.HID_DEVICE)
+        }
+        serviceListener = listener
+        bluetoothAdapter!!.getProfileProxy(context, listener, BluetoothProfile.HID_DEVICE)
     }
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
+        if (!hasPermissions()) {
+            notifyJS("window.onBluetoothError && window.onBluetoothError('NO_PERMISSIONS_GRANTED')")
+            return
+        }
+
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null || !bluetoothAdapter!!.isEnabled) {
             notifyJS("window.onBluetoothError && window.onBluetoothError('BT_DISABLED')")
@@ -148,7 +184,12 @@ class HidManager(private val context: Context, private val webView: WebView) {
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
         try { context.unregisterReceiver(discoveryReceiver) } catch (_: Exception) {}
-        context.registerReceiver(discoveryReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(discoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(discoveryReceiver, filter)
+        }
 
         if (bluetoothAdapter!!.isDiscovering) bluetoothAdapter!!.cancelDiscovery()
         bluetoothAdapter!!.startDiscovery()
@@ -183,9 +224,13 @@ class HidManager(private val context: Context, private val webView: WebView) {
     @SuppressLint("MissingPermission")
     private fun registerApp() {
         hidDevice?.let { device ->
+            hidExecutor?.shutdownNow()
+            val executor = Executors.newSingleThreadExecutor()
+            hidExecutor = executor
+
             val sdp = BluetoothHidDeviceAppSdpSettings(
                 deviceName,
-                "Virtual Gamepad",
+                "Generic HID Gamepad",
                 "GameBridge",
                 BluetoothHidDevice.SUBCLASS2_GAMEPAD,
                 HID_DESCRIPTOR
@@ -201,8 +246,9 @@ class HidManager(private val context: Context, private val webView: WebView) {
                 800, 9, 0, 11250, BluetoothHidDeviceAppQosSettings.MAX
             )
 
-            device.registerApp(sdp, inQos, outQos, Executors.newSingleThreadExecutor(), object : BluetoothHidDevice.Callback() {
+            device.registerApp(sdp, inQos, outQos, executor, object : BluetoothHidDevice.Callback() {
                 override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
+                    appRegistered = registered
                     Log.i(TAG, "Bluetooth HID Profile Status: Registered=$registered | Dispositivo listo para ser hosteado.")
                     if (registered) {
                         notifyJS("window.onHidRegistered && window.onHidRegistered()")
@@ -211,6 +257,8 @@ class HidManager(private val context: Context, private val webView: WebView) {
                         if (context is MainActivity) {
                             context.makeDiscoverable()
                         }
+                    } else {
+                        notifyJS("window.onBluetoothError && window.onBluetoothError('BT_REGISTER_FAILED')")
                     }
                 }
 
@@ -223,6 +271,7 @@ class HidManager(private val context: Context, private val webView: WebView) {
                             notifyJS("window.onDeviceConnected && window.onDeviceConnected(${escapeJS(name)})")
                         }
                         BluetoothProfile.STATE_DISCONNECTED -> {
+                            sendNeutralReport()
                             connectedHost = null
                             notifyJS("window.onDeviceDisconnected && window.onDeviceDisconnected()")
                         }
@@ -239,9 +288,68 @@ class HidManager(private val context: Context, private val webView: WebView) {
         }
     }
 
+    fun sendGamepadState(btnBitmask: Int, dpad: Int, lt: Float, rt: Float, lsX: Float, lsY: Float, rsX: Float, rsY: Float) {
+        sendReport(buildGamepadReport(btnBitmask, dpad, lt, rt, lsX, lsY, rsX, rsY))
+    }
+
     fun cleanup() {
         try { context.unregisterReceiver(discoveryReceiver) } catch (_: Exception) {}
         bluetoothAdapter?.cancelDiscovery()
+        cleanupHidRegistration()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun cleanupHidRegistration() {
+        sendNeutralReport()
+
+        hidDevice?.let { device ->
+            try {
+                if (appRegistered) device.unregisterApp()
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not unregister HID app: ${e.message}")
+            }
+            try {
+                bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, device)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not close HID proxy: ${e.message}")
+            }
+        }
+
+        appRegistered = false
+        connectedHost = null
+        hidDevice = null
+        serviceListener = null
+        hidExecutor?.shutdownNow()
+        hidExecutor = null
+    }
+
+    private fun sendNeutralReport() {
+        if (connectedHost != null && hidDevice != null) {
+            sendReport(buildGamepadReport(0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f))
+        }
+    }
+
+    private fun buildGamepadReport(btnBitmask: Int, dpad: Int, lt: Float, rt: Float, lsX: Float, lsY: Float, rsX: Float, rsY: Float): ByteArray {
+        val report = ByteArray(9)
+        val hat = if (dpad in 1..8) dpad - 1 else 8
+        report[0] = (btnBitmask and 0xFF).toByte()
+        report[1] = ((btnBitmask shr 8) and 0xFF).toByte()
+        report[2] = (hat and 0x0F).toByte()
+        report[3] = axisToByte(lsX)
+        report[4] = axisToByte(lsY)
+        report[5] = axisToByte(rsX)
+        report[6] = axisToByte(rsY)
+        report[7] = triggerToByte(lt)
+        report[8] = triggerToByte(rt)
+        return report
+    }
+
+    private fun axisToByte(value: Float): Byte {
+        return ((value.coerceIn(-1.0f, 1.0f) + 1.0f) * 127.5f).toInt().coerceIn(0, 255).toByte()
+    }
+
+    private fun triggerToByte(value: Float): Byte {
+        return (value.coerceIn(0.0f, 1.0f) * 255.0f).toInt().coerceIn(0, 255).toByte()
     }
 
     private fun notifyJS(jsCode: String) {

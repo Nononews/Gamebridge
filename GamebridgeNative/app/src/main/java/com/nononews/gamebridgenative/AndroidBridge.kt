@@ -1,6 +1,5 @@
 package com.nononews.gamebridgenative
 
-import android.content.Intent
 import android.bluetooth.BluetoothAdapter
 import android.webkit.JavascriptInterface
 
@@ -38,10 +37,8 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
             val adapter = BluetoothAdapter.getDefaultAdapter()
             if (adapter != null && !adapter.isEnabled) {
                 // Pedir que se encienda Bluetooth explícitamente
-                val enableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                activity.startActivity(enableIntent)
+                activity.requestEnableBluetoothThenStart()
+                return@runOnUiThread
             }
             
             // Arrancar el motor HID (El modo discoverable se lanzará tras registro SDP exitoso)
@@ -117,16 +114,7 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
         
         // Send via Protocolo Bluetooth Nativo si esta conectado
         if (hidManager.isConnected) {
-            val report = ByteArray(6)
-            report[0] = (btnBitmask and 0xFF).toByte()
-            report[1] = ((btnBitmask shr 8) and 0xFF).toByte()
-            // Map analog float axes (-1.0 to 1.0) to raw byte bounds (0 to 255)
-            // Default center is 128
-            report[2] = ((lsX + 1.0f) * 127.5f).toInt().coerceIn(0, 255).toByte()
-            report[3] = ((lsY + 1.0f) * 127.5f).toInt().coerceIn(0, 255).toByte()
-            report[4] = ((rsX + 1.0f) * 127.5f).toInt().coerceIn(0, 255).toByte()
-            report[5] = ((rsY + 1.0f) * 127.5f).toInt().coerceIn(0, 255).toByte()
-            hidManager.sendReport(report)
+            hidManager.sendGamepadState(btnBitmask, dpad, lt, rt, lsX, lsY, rsX, rsY)
         }
     }
 
@@ -140,13 +128,16 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
     @JavascriptInterface
     fun enviarReporte(buttons: Int, leftX: Int, leftY: Int, rightX: Int, rightY: Int) {
         if (!hidManager.isConnected) return
-        val report = ByteArray(6)
+        val report = ByteArray(9)
         report[0] = (buttons and 0xFF).toByte()
         report[1] = ((buttons shr 8) and 0xFF).toByte()
-        report[2] = leftX.toByte()
-        report[3] = leftY.toByte()
-        report[4] = rightX.toByte()
-        report[5] = rightY.toByte()
+        report[2] = 8.toByte()
+        report[3] = leftX.toByte()
+        report[4] = leftY.toByte()
+        report[5] = rightX.toByte()
+        report[6] = rightY.toByte()
+        report[7] = 0.toByte()
+        report[8] = 0.toByte()
         hidManager.sendReport(report)
     }
 

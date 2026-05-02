@@ -92,6 +92,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun requestEnableBluetoothThenStart() {
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        if (adapter == null) {
+            webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_UNAVAILABLE')", null)
+            return
+        }
+
+        if (adapter.isEnabled) {
+            hidManager.start()
+            return
+        }
+
+        try {
+            val enableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            @Suppress("DEPRECATION")
+            startActivityForResult(enableIntent, REQUEST_ENABLE_BT)
+        } catch (e: Exception) {
+            webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_ENABLE_FAILED')", null)
+        }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_PERMISSIONS) {
@@ -107,6 +128,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ENABLE_BT) {
+            val adapter = BluetoothAdapter.getDefaultAdapter()
+            if (adapter != null && adapter.isEnabled) {
+                hidManager.start()
+            } else {
+                webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_ENABLE_CANCELLED')", null)
+            }
+        }
     }
 
     private fun hideSystemUI() {
