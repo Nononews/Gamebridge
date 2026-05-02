@@ -365,7 +365,7 @@
             display:flex; align-items:center; justify-content:center; transition:all 0.09s;
         }
 
-        /* ========== PANTALLA 3: ESCANER BT ========== */
+        /* ========== PANTALLA 3: CONEXION WI-FI ========== */
         #screen-connect { background:var(--bg-dark); flex-direction:column; }
 
         .scan-header {
@@ -385,70 +385,10 @@
         .scan-dot.on { background:var(--theme-glow); box-shadow:0 0 8px var(--theme-glow); animation:blink 1s infinite; }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-        .scan-action-bar {
-            display:flex; gap:10px; padding:11px 18px; flex-shrink:0; align-items:center;
-        }
-        .scan-badge {
-            background:rgba(var(--rgb-glow),0.1); border:1px solid rgba(var(--rgb-glow),0.25);
-            color:var(--theme-accent); border-radius:20px; padding:5px 14px;
-            font-size:0.78rem; font-weight:600;
-        }
-
-        #scan-list-wrapper { flex:1; overflow-y:auto; padding:4px 14px 14px; }
-        .scan-section-lbl {
-            font-size:0.62rem; color:var(--text-muted); text-transform:uppercase;
-            letter-spacing:2.5px; padding:10px 4px 5px; font-weight:600;
-        }
-        .device-row {
-            display:flex; align-items:center; gap:13px;
-            padding:12px 15px; border-radius:12px;
-            border:1px solid rgba(255,255,255,0.07);
-            background:rgba(255,255,255,0.02); margin-bottom:8px;
-            cursor:pointer; transition:all 0.15s;
-        }
-        .device-row:active { background:rgba(var(--rgb-glow),0.1); border-color:rgba(var(--rgb-glow),0.4); }
-        .device-row.is-pc  { border-color:rgba(var(--rgb-glow),0.3); background:rgba(var(--rgb-glow),0.05); }
-        .device-ico {
-            width:40px; height:40px; border-radius:10px;
-            background:rgba(255,255,255,0.06); display:flex; align-items:center;
-            justify-content:center; font-size:1.25rem; flex-shrink:0;
-        }
-        .device-row.is-pc .device-ico { background:rgba(var(--rgb-glow),0.14); }
-        .device-info-col { flex:1; min-width:0; }
-        .device-name { font-size:0.9rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .device-mac  { font-size:0.7rem; color:var(--text-muted); margin-top:1px; }
-        .device-pc-badge {
-            font-size:0.62rem; font-weight:700; text-transform:uppercase;
-            padding:3px 8px; border-radius:5px;
-            background:rgba(var(--rgb-glow),0.2); color:var(--theme-accent); flex-shrink:0;
-        }
-        .scan-empty { text-align:center; color:var(--text-muted); padding:28px 10px; font-size:0.88rem; line-height:1.6; }
-
-        /* ========== PANTALLA 4: CONECTANDO ========== */
-        #screen-connecting {
-            background:var(--bg-dark); justify-content:center; align-items:center;
-            gap:16px; text-align:center; padding:30px;
-        }
-        .spinner {
-            width:60px; height:60px; border-radius:50%;
-            border:3px solid rgba(255,255,255,0.08); border-top-color:var(--theme-glow);
-            animation:spin 0.85s linear infinite;
-        }
-        @keyframes spin { to { transform:rotate(360deg); } }
         @keyframes ripple {
             0%   { transform:scale(1);   opacity:0.8; }
             100% { transform:scale(1.35);opacity:0; }
         }
-
-        /* Pairing info box */
-        .pair-info-box {
-            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);
-            border-radius:14px; padding:16px 18px; max-width:300px;
-            font-size:0.82rem; line-height:1.7; color:var(--text-muted); text-align:left;
-        }
-        .pair-info-box strong { color:var(--theme-accent); display:block; margin-bottom:4px; }
-        .pair-info-box ol { padding-left:18px; }
-        .pair-info-box li { margin-bottom:4px; }
     </style>
 </head>
 
@@ -710,57 +650,9 @@
         <!-- Botones -->
         <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;" id="wifi-action-btns">
             <button class="btn btn-primary" id="pair-start-btn" onclick="startWifiConnection()" style="font-size:0.9rem;padding:10px 24px;">&#128268; Conectar Wi-Fi</button>
-            <button class="btn btn-secondary" onclick="startPassiveBluetooth()" style="font-size:0.9rem;padding:10px 24px;background:#0088ff;border-color:#0088ff;">&#128241; Bluetooth Nativo</button>
         </div>
         <button class="btn btn-outline" onclick="goBackToSelection()" style="font-size:0.81rem;opacity:0.7;margin-top:8px;">Cancelar</button>
     </div>
-
-    <!-- RECONECTAR: Lista de dispositivos (oculta por defecto) -->
-    <div id="scan-list-panel" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
-        <div class="scan-action-bar">
-            <span class="scan-badge" id="scan-badge">Xbox</span>
-            <button class="btn btn-primary" onclick="startBluetoothScan()" style="font-size:0.82rem;padding:7px 16px;">&#128268; Escanear</button>
-            <button class="btn btn-outline" onclick="showPeripheralPanel()" style="font-size:0.82rem;padding:7px 16px;margin-left:auto;">&#8592; Volver</button>
-        </div>
-        <div id="scan-list-wrapper" style="flex:1;overflow-y:auto;padding:4px 14px 14px;">
-            <div class="scan-section-lbl">COMPUTADORAS DETECTADAS</div>
-            <div id="scan-computers"><div class="scan-empty">Presiona "Escanear" para buscar...</div></div>
-            <div class="scan-section-lbl" id="scan-others-lbl" style="display:none;">OTROS DISPOSITIVOS</div>
-            <div id="scan-others"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ================================================================
-     PANTALLA 4: CONECTANDO
-================================================================ -->
-<div id="screen-connecting" class="screen">
-    <div class="spinner" id="conn-spinner"></div>
-    <h2 id="conn-title" style="font-size:1.15rem;font-weight:700;">Conectando...</h2>
-    <p id="conn-sub" style="color:var(--text-muted);font-size:0.85rem;max-width:280px;">Espera...</p>
-
-    <div class="pair-info-box" id="pair-info">
-        <strong>&#128172; Emparejar en Windows</strong>
-        <ol>
-            <li>Abre <b>Configuraci&oacute;n &rarr; Bluetooth</b> en tu PC</li>
-            <li>Pulsa <b>"Agregar dispositivo"</b></li>
-            <li>Busca <b id="pair-device-name-display">Xbox Wireless Controller</b></li>
-            <li>Haz clic en el dispositivo y confirma si te pide c&oacute;digo</li>
-        </ol>
-    </div>
-
-    <!-- Error / Timeout box -->
-    <div id="conn-error-box" style="display:none;flex-direction:column;align-items:center;gap:12px;margin-top:8px;">
-        <div style="background:rgba(255,50,50,0.1);border:1px solid rgba(255,80,80,0.3);border-radius:12px;padding:14px 20px;color:#ff8080;font-size:0.84rem;text-align:center;max-width:280px;">
-            &#9888; Tiempo de conexion agotado.<br>Verifica que el PC tenga Bluetooth activo y sea visible.
-        </div>
-        <div style="display:flex;gap:12px;">
-            <button class="btn btn-primary" onclick="retryConnect()" style="font-size:0.85rem;">&#8635; Reintentar</button>
-            <button class="btn btn-outline" onclick="goBackToSelection()" style="font-size:0.85rem;">Probar otro m&eacute;todo</button>
-        </div>
-    </div>
-
-    <button class="btn btn-outline" id="conn-cancel-btn" onclick="goBackToSelection()" style="margin-top:8px;">Cancelar</button>
 </div>
 
 <!-- ================================================================
@@ -1137,7 +1029,6 @@ function exitEditMode() { hapticUI(18); setMode('test'); }
 function goBackToSelection() {
     hapticUI(28);
     if (window.AndroidBridge) {
-        try { window.AndroidBridge.detenerEscaneo(); } catch(e) {}
         window.AndroidBridge.setOrientation(false);
     }
     currentType = 'init';
@@ -1396,7 +1287,6 @@ window.onNetworkError = function(err) {
         htmlContent += '</div>';
         htmlContent += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:10px;">';
         htmlContent += '<button class="btn btn-primary" onclick="startWifiConnection()" style="font-size:0.85rem;padding:10px 18px;">&#8635; Reintentar</button>';
-        htmlContent += '<button class="btn btn-secondary" onclick="document.getElementById(\'wifi-error-box\').style.display=\'none\'; document.getElementById(\'wifi-action-btns\').style.display=\'flex\'; AndroidBridge.conectarBluetooth();" style="font-size:0.85rem;padding:10px 18px;background:#0088ff;border-color:#0088ff;">&#128241; Cambiar a Bluetooth</button>';
         htmlContent += '</div>';
         
         errorBox.innerHTML = htmlContent;
@@ -1411,31 +1301,11 @@ window.onNetworkError = function(err) {
 };
 
 /* --- Mocks/Placeholders vacíos --- */
-function showPeripheralPanel() {
-    document.getElementById('scan-list-panel').style.display = 'none';
-    document.getElementById('pair-peripheral-panel').style.display = 'flex';
-}
-function connectDevice(address, name) {}
-function startBluetoothScan() {
-    hapticUI(30);
-    var badge = document.getElementById('scan-badge');
-    if(badge) {
-        if(currentType === 'ps') badge.classList.add('anim-pulse-blue');
-        else badge.classList.add('anim-pulse-green');
-    }
-    document.getElementById('scan-computers').innerHTML = '<div class="scan-empty">Buscando dispositivos cercanos...</div>';
-    if(window.AndroidBridge && window.AndroidBridge.iniciarEscaneo) {
-        window.AndroidBridge.iniciarEscaneo();
-    }
-}
-function showReconnectScanner() {}
 
 /* Regresar desde sub-pantallas a Seleccion Principal */
 function goBackToSelection() {
     hapticUI(20);
-    if(window.AndroidBridge && window.AndroidBridge.detenerEscaneo) {
-        window.AndroidBridge.detenerEscaneo();
-    }
+    if(window.AndroidBridge) window.AndroidBridge.setOrientation(false);
     
     // Detener polling y loops activos
     if (typeof connTimeoutId !== 'undefined' && connTimeoutId) { clearTimeout(connTimeoutId); connTimeoutId = null; }
@@ -1443,21 +1313,9 @@ function goBackToSelection() {
     if (typeof stopControllerLoop === 'function') stopControllerLoop();
     
     // Restablecer panels
-    var plList = document.getElementById('scan-list-panel');
     var plPai = document.getElementById('pair-peripheral-panel');
-    if(plList) plList.style.display = 'none';
     if(plPai) plPai.style.display = 'flex';
     
-    var errBox = document.getElementById('conn-error-box');
-    var connSpin = document.getElementById('conn-spinner');
-    var paiInfo = document.getElementById('pair-info');
-    if(errBox) errBox.style.display = 'none';
-    if(connSpin) connSpin.style.display = 'block';
-    if(paiInfo) paiInfo.style.display = 'flex';
-    
-    var badge = document.getElementById('scan-badge');
-    if(badge) badge.classList.remove('anim-pulse-green', 'anim-pulse-blue');
-
     showScreen('screen-selection');
 }
 
@@ -1479,48 +1337,7 @@ window.onNativeBackPressed = function() {
         return "HANDLED";
     }
 }
-var lastConnectedAddress = null;
-var lastConnectedName = null;
 var connTimeoutId = null;
-
-function startPassiveBluetooth() {
-    hapticUI(30);
-    showScreen('screen-connecting');
-    document.getElementById('conn-title').textContent = 'Modo Emparejamiento';
-    document.getElementById('conn-sub').textContent = 'Visible por 120 segundos';
-    document.getElementById('conn-error-box').style.display = 'none';
-    document.getElementById('conn-spinner').style.display = 'block';
-    document.getElementById('pair-info').style.display = 'block';
-    var cancelBtn = document.getElementById('conn-cancel-btn');
-    if (cancelBtn) cancelBtn.style.display = 'inline-block';
-    
-    var namesMap = { ps: 'Wireless Controller', xbox: 'Xbox Wireless Controller', generic: 'GameBridge Controller', racing: 'GameBridge Wheel' };
-    var hidName = namesMap[currentType] || 'GameBridge Controller';
-    var pairDisplay = document.getElementById('pair-device-name-display');
-    if (pairDisplay) pairDisplay.textContent = hidName;
-    
-    if (window.AndroidBridge && window.AndroidBridge.conectarBluetooth) {
-        window.AndroidBridge.conectarBluetooth();
-    }
-    
-    if (connTimeoutId) clearTimeout(connTimeoutId);
-    connTimeoutId = setTimeout(function() {
-        window.onBluetoothError('TIMEOUT');
-    }, 120000);
-}
-
-window.onDeviceConnected = function(deviceName) {
-    if (connTimeoutId) { clearTimeout(connTimeoutId); connTimeoutId = null; }
-    var spinner = document.getElementById('conn-spinner');
-    if (spinner) spinner.style.display = 'none';
-    document.getElementById('conn-title').textContent = '¡Conectado!';
-    document.getElementById('conn-sub').textContent = deviceName || 'PC';
-    setTimeout(function() {
-        setMode('play');
-        showScreen('screen-gamepad');
-        startControllerLoop();
-    }, 800);
-};
 
 window.onDeviceDisconnected = function() {
     if (appState === 'play') {
@@ -1546,58 +1363,6 @@ window.onDeviceDisconnected = function() {
     }
 };
 
-window.onHidRegistered = function() {
-    /* HID profile active: device is now broadcasting as the gamepad */
-    var namesMap = { ps: 'Wireless Controller', xbox: 'Xbox Wireless Controller', generic: 'GameBridge Controller', racing: 'GameBridge Wheel' };
-    var hidName = namesMap[currentType] || 'GameBridge Controller';
-    var msg = document.getElementById('pair-status-msg');
-    if (msg) {
-        msg.textContent = '&#10003; Activo — Buscando "' + hidName + '" en tu PC...';
-        msg.style.color = 'var(--theme-accent)';
-    }
-    var dot = document.getElementById('scan-dot');
-    if (dot) dot.classList.add('on');
-    
-    var pairDisplay = document.getElementById('pair-device-name-display');
-    if (pairDisplay) pairDisplay.textContent = hidName;
-};
-
-/* Reintentar la ultima conexion */
-function retryConnect() {
-    // Si estamos en pantalla de conexión BT, simplemente iniciar BT pasivo
-    if (document.getElementById('screen-connecting').classList.contains('active')) {
-        startPassiveBluetooth();
-    } else {
-        startWifiConnection();
-    }
-}
-
-window.onBluetoothError = function(code) {
-    /* Cancelar timeout si hay uno pendiente */
-    if (connTimeoutId) { clearTimeout(connTimeoutId); connTimeoutId = null; }
-
-    /* Ocultar spinner, mostrar error */
-    var spinner = document.getElementById('conn-spinner');
-    if (spinner) spinner.style.display = 'none';
-
-    var msg = code === 'BT_DISABLED'
-        ? 'El Bluetooth esta apagado. Activalo e intenta de nuevo.'
-        : (code === 'CONNECT_FAILED'
-            ? 'No se pudo conectar. Verifica que el PC este disponible.'
-            : 'Error de conexion: ' + code);
-
-    /* Si estamos en la pantalla de conectando, mostrar error ahi */
-    if (document.getElementById('screen-connecting').classList.contains('active')) {
-        document.getElementById('conn-title').textContent = 'Error de conexion';
-        document.getElementById('conn-sub').textContent   = msg;
-        document.getElementById('pair-info').style.display   = 'none';
-        document.getElementById('conn-error-box').style.display = 'flex';
-        hapticUI([40, 80, 40]);
-    } else {
-        document.getElementById('scan-dot').classList.remove('on');
-        document.getElementById('scan-subtitle').textContent = msg;
-    }
-};
 
 /* ================================================================
    UDP NETWORK LOOP (Envio Asíncrono Basado en Eventos)

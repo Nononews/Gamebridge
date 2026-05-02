@@ -1,11 +1,7 @@
 package com.nononews.gamebridgenative
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -14,19 +10,11 @@ import android.view.WindowInsetsController
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.activity.OnBackPressedCallback
 
 class MainActivity : AppCompatActivity() {
 
     lateinit var webView: WebView
-    lateinit var hidManager: HidManager
-
-    companion object {
-        const val REQUEST_PERMISSIONS = 100
-        const val REQUEST_ENABLE_BT = 101
-    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,13 +27,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(webView)
         hideSystemUI()
 
-        hidManager = HidManager(this, webView)
-
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
 
-        webView.addJavascriptInterface(AndroidBridge(this, hidManager), "AndroidBridge")
+        webView.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
         webView.loadUrl("file:///android_asset/index.html")
         
         // Manejo del gesto "Atras" nativo de Android
@@ -66,7 +52,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-        // Permissions requested when user picks a joystick (via AndroidBridge.setConfig)
     }
 
     fun setOrientation(landscape: Boolean) {
@@ -74,68 +59,6 @@ class MainActivity : AppCompatActivity() {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-    }
-
-    fun requestPermissionsIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val perms = arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_SCAN)
-            val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-            if (missing.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_PERMISSIONS)
-            }
-        } else {
-            val perms = arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_ADMIN, Manifest.permission.ACCESS_FINE_LOCATION)
-            val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-            if (missing.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_PERMISSIONS)
-            }
-        }
-    }
-
-    fun requestEnableBluetoothThenStart() {
-        val adapter = BluetoothAdapter.getDefaultAdapter()
-        if (adapter == null) {
-            webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_UNAVAILABLE')", null)
-            return
-        }
-
-        if (adapter.isEnabled) {
-            hidManager.start()
-            return
-        }
-
-        try {
-            val enableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            @Suppress("DEPRECATION")
-            startActivityForResult(enableIntent, REQUEST_ENABLE_BT)
-        } catch (e: Exception) {
-            webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_ENABLE_FAILED')", null)
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_PERMISSIONS) {
-            val allGranted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            if (allGranted) {
-                // Iniciar motor HID, el cual pedirá visibilidad una vez registrado el perfil
-                runOnUiThread {
-                    hidManager.start()
-                }
-            }
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_ENABLE_BT) {
-            val adapter = BluetoothAdapter.getDefaultAdapter()
-            if (adapter != null && adapter.isEnabled) {
-                hidManager.start()
-            } else {
-                webView.evaluateJavascript("window.onBluetoothError && window.onBluetoothError('BT_ENABLE_CANCELLED')", null)
-            }
-        }
     }
 
     private fun hideSystemUI() {
@@ -156,21 +79,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun makeDiscoverable() {
-        runOnUiThread {
-            try {
-                val discoverableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
-                    putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
-                }
-                startActivity(discoverableIntent)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        hidManager.cleanup()
-    }
 }
