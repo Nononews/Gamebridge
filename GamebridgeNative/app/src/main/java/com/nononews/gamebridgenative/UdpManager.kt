@@ -180,23 +180,6 @@ class UdpManager {
         s.send(packet)
     }
 
-    /** Fallback for legacy JSON clients */
-    fun sendPayload(jsonPayload: String) {
-        val ip = targetAddress ?: return
-        val s = socket ?: return
-        
-        ensureScope()
-        udpScope.launch {
-            try {
-                val bytes = jsonPayload.toByteArray(Charsets.UTF_8)
-                val packet = DatagramPacket(bytes, bytes.size, ip, targetPort)
-                s.send(packet)
-            } catch (e: Exception) {
-                Log.e("UdpManager", "Error sending string UDP packet", e)
-            }
-        }
-    }
-
     fun disconnect() {
         udpScope.cancel()
         socket?.close()

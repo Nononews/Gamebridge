@@ -62,12 +62,6 @@ class AndroidBridge(private val activity: MainActivity) {
         udpManager.sendBinary(tipo, btnBitmask, dpad, lt, rt, lsX, lsY, rsX, rsY)
     }
 
-    /** Send JSON state to PC Server via UDP for Wi-Fi Mode */
-    @JavascriptInterface
-    fun enviarEstadoRedLocal(jsonPayload: String) {
-        udpManager.sendPayload(jsonPayload)
-    }
-
     private fun escapeJs(value: String): String {
         return value
             .replace("\\", "\\\\")

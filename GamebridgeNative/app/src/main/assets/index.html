@@ -1370,7 +1370,7 @@ window.onDeviceDisconnected = function() {
 ================================================================ */
 var lastJson = '';
 window.triggerStateUpdate = function(forceSend) {
-    if (appState !== 'play' || !window.AndroidBridge || !window.AndroidBridge.enviarEstadoRedLocal) return;
+    if (appState !== 'play' || !window.AndroidBridge || !window.AndroidBridge.enviarUDPBinario) return;
     
     var typeInt = 0;
     if (currentType === 'xbox') typeInt = 1;
@@ -1445,14 +1445,7 @@ window.triggerStateUpdate = function(forceSend) {
     }
     
     if (forceSend || currentStateHash !== lastJson || keepalive) {
-        if(window.AndroidBridge && window.AndroidBridge.enviarUDPBinario) {
-            window.AndroidBridge.enviarUDPBinario(typeInt, btnBitmask, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y);
-        } else if(window.AndroidBridge && window.AndroidBridge.enviarEstadoRedLocal) {
-            // BACKWARD COMPATIBILITY
-            var payload = { type: currentType, btn_a: btnA, btn_b: btnB, btn_x: btnX, btn_y: btnY, btn_l1: btnL1, btn_r1: btnR1, btn_l3: btnL3, btn_r3: btnR3, btn_select: btnSelect, btn_start: btnStart, dpad: dpad, lt: lt, rt: rt, ls_x: ls_x, ls_y: ls_y, rs_x: rs_x, rs_y: rs_y };
-            if(keepalive) payload._ts = now;
-            window.AndroidBridge.enviarEstadoRedLocal(JSON.stringify(payload));
-        }
+        window.AndroidBridge.enviarUDPBinario(typeInt, btnBitmask, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y);
         lastJson = currentStateHash;
         if (forceSend || keepalive) window.lastKeepaliveTime = now;
     }
