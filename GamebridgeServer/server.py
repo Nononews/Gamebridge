@@ -24,6 +24,8 @@ PAIRING_SESSION_TTL_SECONDS = 12 * 60 * 60.0
 PAIRING_MAX_ATTEMPTS = 8
 PAIRING_ATTEMPT_WINDOW_SECONDS = 60.0
 MAX_PLAYERS = 4
+SEQ_MODULO = 2 ** 32
+SEQ_HALF_RANGE = 2 ** 31
 
 state_lock = threading.RLock()
 current_gamepad_type = 'xbox'
@@ -33,6 +35,7 @@ connected_clients = {}  # ip -> {"last_packet": float, "slot": int}
 latest_gamepad_state = {}
 paired_clients = {}  # ip -> {"paired_at": float, "last_seen": float}
 pairing_attempts = {}  # ip -> [attempt_timestamp, ...]
+client_protocol_stats = {}  # ip -> packet order and latency metrics
 pairing_code = f"{secrets.randbelow(1_000_000):06d}"
 pairing_code_created_at = time.time()
 
@@ -340,7 +343,7 @@ def pair_client(client_ip, submitted_code):
 
 
 def cleanup_dead_clients(now=None):
-    global connected_clients, latest_gamepad_state
+    global connected_clients, latest_gamepad_state, client_protocol_stats
     if now is None:
         now = time.time()
 
@@ -350,6 +353,7 @@ def cleanup_dead_clients(now=None):
         for ip in dead_ips:
             slot = connected_clients[ip]['slot']
             del connected_clients[ip]
+            client_protocol_stats.pop(ip, None)
             latest_gamepad_state[str(slot)] = payload_to_frontend_state(NEUTRAL_PAYLOAD)
             reset_needed = True
 
@@ -374,43 +378,167 @@ def get_or_assign_client_slot(client_ip, now):
         return slot
 
 
-def decode_udp_payload(data):
-    if len(data) == 28:
-        tipo, btns, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y = struct.unpack('<BHBffffff', data)
+def is_sequence_newer(seq, last_seq):
+    diff = (seq - last_seq) % SEQ_MODULO
+    return 0 < diff < SEQ_HALF_RANGE
 
-        type_str = 'generic'
-        if tipo == 1:
-            type_str = 'xbox'
-        elif tipo == 2:
-            type_str = 'ps'
-        elif tipo == 3:
-            type_str = 'racing'
 
-        return normalize_payload({
-            'type': type_str,
-            'btn_a': 1 if (btns & (1 << 0)) else 0,
-            'btn_b': 1 if (btns & (1 << 1)) else 0,
-            'btn_x': 1 if (btns & (1 << 2)) else 0,
-            'btn_y': 1 if (btns & (1 << 3)) else 0,
-            'btn_l1': 1 if (btns & (1 << 4)) else 0,
-            'btn_r1': 1 if (btns & (1 << 5)) else 0,
-            'btn_l3': 1 if (btns & (1 << 6)) else 0,
-            'btn_r3': 1 if (btns & (1 << 7)) else 0,
-            'btn_select': 1 if (btns & (1 << 8)) else 0,
-            'btn_start': 1 if (btns & (1 << 9)) else 0,
-            'dpad': dpad,
-            'lt': lt,
-            'rt': rt,
-            'ls_x': ls_x,
-            'ls_y': ls_y,
-            'rs_x': rs_x,
-            'rs_y': rs_y
+def update_protocol_stats(client_ip, meta, now):
+    if not meta or meta.get('seq') is None:
+        return True
+
+    try:
+        seq = int(meta['seq']) % SEQ_MODULO
+    except (TypeError, ValueError):
+        return True
+    client_ts_ms = meta.get('timestamp_ms')
+    now_ms = now * 1000.0
+
+    with state_lock:
+        stats = client_protocol_stats.setdefault(client_ip, {
+            'last_seq': None,
+            'accepted_packets': 0,
+            'old_packets': 0,
+            'lost_packets': 0,
+            'last_arrival': None,
+            'packet_rate_hz': 0.0,
+            'latency_ms': None,
+            'jitter_ms': None,
+            'last_latency_ms': None
         })
 
-    if len(data) > 0 and data[0] == ord('{'):
-        return normalize_payload(json.loads(data.decode('utf-8')))
+        last_seq = stats.get('last_seq')
+        if last_seq is not None and not is_sequence_newer(seq, last_seq):
+            stats['old_packets'] = stats.get('old_packets', 0) + 1
+            return False
 
-    return None
+        if last_seq is not None:
+            gap = (seq - last_seq) % SEQ_MODULO
+            if gap > 1:
+                stats['lost_packets'] = stats.get('lost_packets', 0) + min(gap - 1, 10_000)
+
+        previous_arrival = stats.get('last_arrival')
+        if previous_arrival:
+            delta = max(0.001, now - previous_arrival)
+            instant_rate = min(240.0, 1.0 / delta)
+            stats['packet_rate_hz'] = (stats.get('packet_rate_hz', 0.0) * 0.85) + (instant_rate * 0.15)
+
+        if client_ts_ms is not None:
+            latency = now_ms - float(client_ts_ms)
+            if 0 <= latency <= 10_000:
+                previous_latency = stats.get('last_latency_ms')
+                if stats.get('latency_ms') is None:
+                    stats['latency_ms'] = latency
+                    stats['jitter_ms'] = 0.0
+                else:
+                    stats['latency_ms'] = (stats['latency_ms'] * 0.85) + (latency * 0.15)
+                    if previous_latency is not None:
+                        variation = abs(latency - previous_latency)
+                        stats['jitter_ms'] = (stats.get('jitter_ms', 0.0) * 0.85) + (variation * 0.15)
+                stats['last_latency_ms'] = latency
+
+        stats['last_seq'] = seq
+        stats['accepted_packets'] = stats.get('accepted_packets', 0) + 1
+        stats['last_arrival'] = now
+        return True
+
+
+def quality_from_stats(stats):
+    if not stats:
+        return {
+            "level": "unknown",
+            "score": 0,
+            "latencyMs": None,
+            "jitterMs": None,
+            "packetRateHz": 0,
+            "acceptedPackets": 0,
+            "oldPackets": 0,
+            "lostPackets": 0
+        }
+
+    latency = stats.get('latency_ms')
+    jitter = stats.get('jitter_ms')
+    old_packets = stats.get('old_packets', 0)
+    lost_packets = stats.get('lost_packets', 0)
+    accepted = max(1, stats.get('accepted_packets', 0))
+    loss_ratio = min(1.0, (old_packets + lost_packets) / max(accepted + old_packets + lost_packets, 1))
+
+    score = 100
+    if latency is not None:
+        score -= max(0, min(45, (latency - 18) * 0.9))
+    if jitter is not None:
+        score -= max(0, min(35, jitter * 2.0))
+    score -= min(45, loss_ratio * 180)
+    score = int(max(0, min(100, round(score))))
+
+    if score >= 80:
+        level = "excellent"
+    elif score >= 60:
+        level = "good"
+    elif score >= 35:
+        level = "fair"
+    else:
+        level = "poor"
+
+    return {
+        "level": level,
+        "score": score,
+        "latencyMs": None if latency is None else round(latency, 1),
+        "jitterMs": None if jitter is None else round(jitter, 1),
+        "packetRateHz": round(stats.get('packet_rate_hz', 0.0), 1),
+        "acceptedPackets": stats.get('accepted_packets', 0),
+        "oldPackets": old_packets,
+        "lostPackets": lost_packets
+    }
+
+
+def decode_udp_payload(data):
+    meta = {}
+
+    if len(data) == 40:
+        tipo, btns, dpad, seq, timestamp_ms, lt, rt, ls_x, ls_y, rs_x, rs_y = struct.unpack('<BHBIQffffff', data)
+        meta = {'seq': seq, 'timestamp_ms': timestamp_ms}
+    elif len(data) == 28:
+        tipo, btns, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y = struct.unpack('<BHBffffff', data)
+    else:
+        if len(data) > 0 and data[0] == ord('{'):
+            decoded = json.loads(data.decode('utf-8'))
+            meta = {
+                'seq': decoded.get('seq'),
+                'timestamp_ms': decoded.get('timestampMs') or decoded.get('timestamp')
+            }
+            return normalize_payload(decoded), meta
+
+        return None, meta
+
+    type_str = 'generic'
+    if tipo == 1:
+        type_str = 'xbox'
+    elif tipo == 2:
+        type_str = 'ps'
+    elif tipo == 3:
+        type_str = 'racing'
+
+    return normalize_payload({
+        'type': type_str,
+        'btn_a': 1 if (btns & (1 << 0)) else 0,
+        'btn_b': 1 if (btns & (1 << 1)) else 0,
+        'btn_x': 1 if (btns & (1 << 2)) else 0,
+        'btn_y': 1 if (btns & (1 << 3)) else 0,
+        'btn_l1': 1 if (btns & (1 << 4)) else 0,
+        'btn_r1': 1 if (btns & (1 << 5)) else 0,
+        'btn_l3': 1 if (btns & (1 << 6)) else 0,
+        'btn_r3': 1 if (btns & (1 << 7)) else 0,
+        'btn_select': 1 if (btns & (1 << 8)) else 0,
+        'btn_start': 1 if (btns & (1 << 9)) else 0,
+        'dpad': dpad,
+        'lt': lt,
+        'rt': rt,
+        'ls_x': ls_x,
+        'ls_y': ls_y,
+        'rs_x': rs_x,
+        'rs_y': rs_y
+    }), meta
 
 
 def udp_server_loop():
@@ -427,12 +555,15 @@ def udp_server_loop():
         if not is_paired_client(client_ip):
             continue
 
-        slot = get_or_assign_client_slot(client_ip, now)
-
         try:
-            payload = decode_udp_payload(data)
+            payload, meta = decode_udp_payload(data)
             if not payload:
                 continue
+
+            if not update_protocol_stats(client_ip, meta, now):
+                continue
+
+            slot = get_or_assign_client_slot(client_ip, now)
 
             with state_lock:
                 latest_gamepad_state[str(slot)] = payload_to_frontend_state(payload)
@@ -482,6 +613,10 @@ def get_status():
             slot = connected_clients[client_ip]['slot']
         elif is_connected:
             slot = 1
+        stats = client_protocol_stats.get(client_ip)
+        if stats is None and connected_clients:
+            first_ip = next(iter(connected_clients.keys()))
+            stats = client_protocol_stats.get(first_ip)
 
         response = {
             "service": "gamebridge",
@@ -495,7 +630,13 @@ def get_status():
             "pairedCount": len(paired_clients),
             "pairCode": pairing_code,
             "pairCodeTtlMs": max(0, int((PAIRING_CODE_TTL_SECONDS - (time.time() - pairing_code_created_at)) * 1000)),
-            "timeoutMs": int(CLIENT_TIMEOUT_SECONDS * 1000)
+            "timeoutMs": int(CLIENT_TIMEOUT_SECONDS * 1000),
+            "protocol": {
+                "version": 2,
+                "supportsSequencing": True,
+                "packetBytes": 40
+            },
+            "quality": quality_from_stats(stats)
         }
         return response
 

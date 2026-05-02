@@ -68,6 +68,11 @@ class AndroidBridge(private val activity: MainActivity) {
         udpManager.sendPayload(jsonPayload)
     }
 
+    @JavascriptInterface
+    fun setProtocolFrequency(hz: Int) {
+        udpManager.setSendFrequencyHz(hz)
+    }
+
     private fun escapeJs(value: String): String {
         return value
             .replace("\\", "\\\\")

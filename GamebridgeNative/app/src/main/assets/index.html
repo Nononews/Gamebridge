@@ -473,6 +473,7 @@
         <div class="status-badge" id="hud-status">
             <span class="dot"></span>
             <span id="hud-title">Modo Prueba</span>
+            <span id="quality-label" style="display:none;font-size:0.68rem;color:var(--text-muted);margin-left:6px;">--</span>
         </div>
         <div id="test-controls">
             <button class="btn btn-outline" onclick="setMode('edit')">&#9881; Editar</button>
@@ -495,6 +496,12 @@
             <button class="opt-btn" onclick="setHaptic(0.5)">Suave</button>
             <button class="opt-btn sel" onclick="setHaptic(1)">Media</button>
             <button class="opt-btn" onclick="setHaptic(2)">Fuerte</button>
+        </div>
+        <div class="modal-title" style="margin-top:6px;">Frecuencia Wi-Fi</div>
+        <div class="haptic-opts" id="freq-options">
+            <button class="opt-btn" onclick="setProtocolHz(30, event)">30 Hz</button>
+            <button class="opt-btn sel" onclick="setProtocolHz(60, event)">60 Hz</button>
+            <button class="opt-btn" onclick="setProtocolHz(120, event)">120 Hz</button>
         </div>
     </div>
 
@@ -665,6 +672,7 @@
 var currentType   = 'init';
 var appState      = 'test';
 var hapticLevel   = 1;
+var protocolHz    = 60;
 var currentRgbGlow = '170,85,255';
 var activeEl      = null;
 var isDragging    = false;
@@ -795,6 +803,48 @@ function setHaptic(lvl) {
     for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
     event.target.classList.add('sel');
     hapticUI(25);
+}
+
+function setProtocolHz(hz, evt) {
+    protocolHz = hz;
+    var btns = document.querySelectorAll('#freq-options .opt-btn');
+    for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
+    if (evt && evt.target) evt.target.classList.add('sel');
+    if (window.AndroidBridge && window.AndroidBridge.setProtocolFrequency) {
+        window.AndroidBridge.setProtocolFrequency(hz);
+    }
+    if (appState === 'play') startControllerLoop();
+    hapticUI(18);
+}
+
+function updateQualityIndicator(quality) {
+    var label = document.getElementById('quality-label');
+    var dot = document.querySelector('#hud-status .dot');
+    if (!label || !dot || !quality || quality.level === 'unknown') {
+        if (label) label.style.display = 'none';
+        return;
+    }
+
+    var colors = {
+        excellent: '#55ff55',
+        good: '#9dff55',
+        fair: '#ffd447',
+        poor: '#ff5555'
+    };
+    var names = {
+        excellent: 'Excelente',
+        good: 'Buena',
+        fair: 'Variable',
+        poor: 'Debil'
+    };
+    var color = colors[quality.level] || '#888';
+    var latency = quality.latencyMs == null ? '--' : Math.round(quality.latencyMs) + 'ms';
+    var jitter = quality.jitterMs == null ? '--' : Math.round(quality.jitterMs) + 'ms';
+    label.textContent = (names[quality.level] || 'Red') + ' ' + latency + ' J' + jitter + ' ' + protocolHz + 'Hz';
+    label.style.display = 'inline';
+    label.style.color = color;
+    dot.style.backgroundColor = color;
+    dot.style.boxShadow = '0 0 8px ' + color;
 }
 
 /* ================================================================
@@ -1255,6 +1305,7 @@ window.onNetworkConnected = function(ip, slot) {
                     window.onDeviceDisconnected();
                 } else if (d && typeof d.slot !== 'undefined') {
                     document.getElementById('hud-title').textContent = 'P' + d.slot + ' - Conectado';
+                    updateQualityIndicator(d.quality);
                 }
             })
             .catch(function(e) {
@@ -1368,7 +1419,7 @@ window.onDeviceDisconnected = function() {
    UDP NETWORK LOOP (Envio Asíncrono Basado en Eventos)
 ================================================================ */
 var lastJson = '';
-window.triggerStateUpdate = function() {
+window.triggerStateUpdate = function(forceSend) {
     if (appState !== 'play' || !window.AndroidBridge || !window.AndroidBridge.enviarEstadoRedLocal) return;
     
     var typeInt = 0;
@@ -1443,17 +1494,16 @@ window.triggerStateUpdate = function() {
         keepalive = true;
     }
     
-    if (currentStateHash !== lastJson || keepalive) {
+    if (forceSend || currentStateHash !== lastJson || keepalive) {
         if(window.AndroidBridge && window.AndroidBridge.enviarUDPBinario) {
             window.AndroidBridge.enviarUDPBinario(typeInt, btnBitmask, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y);
         } else if(window.AndroidBridge && window.AndroidBridge.enviarEstadoRedLocal) {
             // BACKWARD COMPATIBILITY
-            var payload = { type: currentType, btn_a: btnA, btn_b: btnB, btn_x: btnX, btn_y: btnY, btn_l1: btnL1, btn_r1: btnR1, btn_l3: btnL3, btn_r3: btnR3, btn_select: btnSelect, btn_start: btnStart, dpad: dpad, lt: lt, rt: rt, ls_x: ls_x, ls_y: ls_y, rs_x: rs_x, rs_y: rs_y };
-            if(keepalive) payload._ts = now;
+            var payload = { type: currentType, btn_a: btnA, btn_b: btnB, btn_x: btnX, btn_y: btnY, btn_l1: btnL1, btn_r1: btnR1, btn_l3: btnL3, btn_r3: btnR3, btn_select: btnSelect, btn_start: btnStart, dpad: dpad, lt: lt, rt: rt, ls_x: ls_x, ls_y: ls_y, rs_x: rs_x, rs_y: rs_y, seq: window.webSeq = ((window.webSeq || 0) + 1), timestampMs: Date.now() };
             window.AndroidBridge.enviarEstadoRedLocal(JSON.stringify(payload));
         }
         lastJson = currentStateHash;
-        if (keepalive) window.lastKeepaliveTime = now;
+        if (forceSend || keepalive) window.lastKeepaliveTime = now;
     }
 };
 
@@ -1466,10 +1516,13 @@ function startControllerLoop() {
     }
     // La inyección asíncrona es conducida por eventos visuales.
     // Solo dejamos un poll esporádico (4Hz) para prevenir timeouts de la conexión inactiva
+    if (window.AndroidBridge && window.AndroidBridge.setProtocolFrequency) {
+        window.AndroidBridge.setProtocolFrequency(protocolHz);
+    }
     window.controllerLoopId = setInterval(function() {
-        if (appState === 'play') window.triggerStateUpdate();
-    }, 250);
-    window.triggerStateUpdate();
+        if (appState === 'play') window.triggerStateUpdate(true);
+    }, Math.max(8, 1000 / protocolHz));
+    window.triggerStateUpdate(true);
 }
 
 function stopControllerLoop(sendNeutral) {
