@@ -184,10 +184,6 @@
             <div class="box-title">Puerto Abierto</div>
             <div class="box-val" style="color:var(--accent);">UDP 9090</div>
         </div>
-        <div class="info-box">
-            <div class="box-title">Calidad Red</div>
-            <div class="box-val" id="quality-val" style="color:var(--accent);">Esperando...</div>
-        </div>
     </div>
 
     <button class="test-btn" onclick="openTestModal()">🎮 Probar Controles</button>
@@ -254,19 +250,6 @@
             const pairCode = document.getElementById('pair-code-display');
             if (pairCode) {
                 pairCode.innerText = data.pairCode || '------';
-            }
-
-            const qval = document.getElementById('quality-val');
-            if (qval && data.quality && data.quality.level !== 'unknown') {
-                const latency = data.quality.latencyMs == null ? '--' : Math.round(data.quality.latencyMs) + 'ms';
-                const jitter = data.quality.jitterMs == null ? '--' : Math.round(data.quality.jitterMs) + 'ms';
-                const rate = data.quality.packetRateHz ? Math.round(data.quality.packetRateHz) + 'Hz' : '--Hz';
-                const recommended = data.quality.recommendedHz || 60;
-                qval.innerText = latency + ' / J' + jitter + ' / ' + rate + ' | Usa ' + recommended + 'Hz';
-                qval.style.color = data.quality.level === 'poor' ? '#ff4444' : (data.quality.level === 'fair' ? '#ffd447' : '#00e676');
-            } else if (qval) {
-                qval.innerText = data.connected ? 'Midiendo... usa 60Hz' : 'Esperando...';
-                qval.style.color = 'var(--accent)';
             }
 
             const dbox = document.getElementById('driver-box');

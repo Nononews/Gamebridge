@@ -9,15 +9,12 @@ import java.net.InetAddress
 import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
 
 class UdpManager {
     private var socket: DatagramSocket? = null
     private var targetAddress: InetAddress? = null
     private val targetPort = 9090
-    private val sequence = AtomicLong(0)
-    @Volatile private var sendFrequencyHz: Int = 60
     
     // Coroutine Scope strictly bound to IO dispatcher for non-blocking packet blasting
     private var udpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -28,7 +25,7 @@ class UdpManager {
         }
     }
 
-    fun connect(ip: String, pairingCode: String, tipo: Int, profileType: String, onConnected: (Boolean, String?, Int) -> Unit) {
+    fun connect(ip: String, pairingCode: String, tipo: Int, onConnected: (Boolean, String?, Int) -> Unit) {
         ensureScope()
         udpScope.launch {
             try {
@@ -47,7 +44,7 @@ class UdpManager {
                     return@launch
                 }
 
-                val pairResult = pairWithServer(ip, pairingCode.trim(), profileType)
+                val pairResult = pairWithServer(ip, pairingCode.trim())
                 if (!pairResult.optBoolean("ok", false) || pairResult.optString("service") != "gamebridge") {
                     val error = pairResult.optString("error")
                     val message = if (error == "RATE_LIMITED") {
@@ -60,7 +57,6 @@ class UdpManager {
                 }
 
                 targetAddress = InetAddress.getByName(ip)
-                sequence.set(0)
                 if (socket == null || socket?.isClosed == true) {
                     socket = DatagramSocket()
                 }
@@ -113,13 +109,9 @@ class UdpManager {
         }
     }
 
-    private fun pairWithServer(ip: String, code: String, profileType: String): JSONObject {
+    private fun pairWithServer(ip: String, code: String): JSONObject {
         val url = URL("http://$ip:8080/api/pair")
-        val payload = JSONObject()
-            .put("code", code)
-            .put("profile", profileType)
-            .toString()
-            .toByteArray(Charsets.UTF_8)
+        val payload = JSONObject().put("code", code).toString().toByteArray(Charsets.UTF_8)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 2500
@@ -149,13 +141,11 @@ class UdpManager {
     }
 
     /** 
-     * Packs the controller state into a tight 40-byte C-like struct and sends it via DatagramSocket.
-     * Payload structure matches Python struct.unpack('<BHBIQffffff', data):
+     * Packs the controller state into a tight 28-byte C-like struct and sends it via DatagramSocket
+     * Payload structure matches Python struct.unpack('<BHBffffff', data):
      * 1 byte: tipo
      * 2 bytes: btnBitmask
      * 1 byte: dpad
-     * 4 bytes: sequence
-     * 8 bytes: Unix timestamp in milliseconds
      * 4 bytes * 6: lt, rt, lsX, lsY, rsX, rsY (floats)
      */
     fun sendBinary(tipo: Int, btnBitmask: Int, dpad: Int, lt: Float, rt: Float, lsX: Float, lsY: Float, rsX: Float, rsY: Float) {
@@ -173,16 +163,11 @@ class UdpManager {
         val ip = targetAddress ?: return
         val s = socket ?: return
 
-        val seq = (sequence.getAndIncrement() % 4_294_967_296L).toInt()
-        val timestampMs = System.currentTimeMillis()
-
-        // 40 bytes total buffer configured as Little Endian natively to match struct.unpack('<')
-        val buffer = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN)
+        // 28 bytes total buffer configured as Little Endian natively to match struct.unpack('<')
+        val buffer = ByteBuffer.allocate(28).order(ByteOrder.LITTLE_ENDIAN)
         buffer.put(tipo.toByte())
         buffer.putShort(btnBitmask.toShort())
         buffer.put(dpad.toByte())
-        buffer.putInt(seq)
-        buffer.putLong(timestampMs)
         buffer.putFloat(lt)
         buffer.putFloat(rt)
         buffer.putFloat(lsX)
@@ -194,12 +179,6 @@ class UdpManager {
         val packet = DatagramPacket(bytes, bytes.size, ip, targetPort)
         s.send(packet)
     }
-
-    fun setSendFrequencyHz(hz: Int) {
-        sendFrequencyHz = hz.coerceIn(30, 120)
-    }
-
-    fun getSendFrequencyHz(): Int = sendFrequencyHz
 
     /** Fallback for legacy JSON clients */
     fun sendPayload(jsonPayload: String) {
@@ -223,6 +202,5 @@ class UdpManager {
         socket?.close()
         socket = null
         targetAddress = null
-        sequence.set(0)
     }
 }

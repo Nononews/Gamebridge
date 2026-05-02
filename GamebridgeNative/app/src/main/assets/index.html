@@ -473,7 +473,6 @@
         <div class="status-badge" id="hud-status">
             <span class="dot"></span>
             <span id="hud-title">Modo Prueba</span>
-            <span id="quality-label" style="display:none;font-size:0.68rem;color:var(--text-muted);margin-left:6px;">--</span>
         </div>
         <div id="test-controls">
             <button class="btn btn-outline" onclick="setMode('edit')">&#9881; Editar</button>
@@ -491,7 +490,7 @@
     <!-- MODAL: VIBRACION -->
     <div class="modal" id="settings-modal">
         <div class="modal-title">Fuerza de Vibracion</div>
-        <div class="haptic-opts">
+        <div class="haptic-opts" id="haptic-options">
             <button class="opt-btn" onclick="setHaptic(0)">OFF</button>
             <button class="opt-btn" onclick="setHaptic(0.5)">Suave</button>
             <button class="opt-btn sel" onclick="setHaptic(1)">Media</button>
@@ -799,7 +798,7 @@ function toggleModal(id) {
 
 function setHaptic(lvl) {
     hapticLevel = lvl;
-    var btns = document.querySelectorAll('.opt-btn');
+    var btns = document.querySelectorAll('#haptic-options .opt-btn');
     for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
     event.target.classList.add('sel');
     hapticUI(25);
@@ -810,42 +809,8 @@ function setProtocolHz(hz, evt) {
     var btns = document.querySelectorAll('#freq-options .opt-btn');
     for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
     if (evt && evt.target) evt.target.classList.add('sel');
-    if (window.AndroidBridge && window.AndroidBridge.setProtocolFrequency) {
-        window.AndroidBridge.setProtocolFrequency(hz);
-    }
     if (appState === 'play') startControllerLoop();
     hapticUI(18);
-}
-
-function updateQualityIndicator(quality) {
-    var label = document.getElementById('quality-label');
-    var dot = document.querySelector('#hud-status .dot');
-    if (!label || !dot || !quality || quality.level === 'unknown') {
-        if (label) label.style.display = 'none';
-        return;
-    }
-
-    var colors = {
-        excellent: '#55ff55',
-        good: '#9dff55',
-        fair: '#ffd447',
-        poor: '#ff5555'
-    };
-    var names = {
-        excellent: 'Excelente',
-        good: 'Buena',
-        fair: 'Variable',
-        poor: 'Debil'
-    };
-    var color = colors[quality.level] || '#888';
-    var latency = quality.latencyMs == null ? '--' : Math.round(quality.latencyMs) + 'ms';
-    var jitter = quality.jitterMs == null ? '--' : Math.round(quality.jitterMs) + 'ms';
-    var rec = quality.recommendedHz ? ' rec ' + quality.recommendedHz + 'Hz' : '';
-    label.textContent = (names[quality.level] || 'Red') + ' ' + latency + ' J' + jitter + rec;
-    label.style.display = 'inline';
-    label.style.color = color;
-    dot.style.backgroundColor = color;
-    dot.style.boxShadow = '0 0 8px ' + color;
 }
 
 /* ================================================================
@@ -1270,7 +1235,7 @@ function startWifiConnection() {
     }, 10000);
 
     if (window.AndroidBridge && window.AndroidBridge.conectarRedLocal) {
-        window.AndroidBridge.conectarRedLocal(ip, pairCode, currentType);
+        window.AndroidBridge.conectarRedLocal(ip, pairCode);
     } else {
         // Modo web (simulacion)
         setTimeout(function() {
@@ -1306,7 +1271,6 @@ window.onNetworkConnected = function(ip, slot) {
                     window.onDeviceDisconnected();
                 } else if (d && typeof d.slot !== 'undefined') {
                     document.getElementById('hud-title').textContent = 'P' + d.slot + ' - Conectado';
-                    updateQualityIndicator(d.quality);
                 }
             })
             .catch(function(e) {
@@ -1500,7 +1464,8 @@ window.triggerStateUpdate = function(forceSend) {
             window.AndroidBridge.enviarUDPBinario(typeInt, btnBitmask, dpad, lt, rt, ls_x, ls_y, rs_x, rs_y);
         } else if(window.AndroidBridge && window.AndroidBridge.enviarEstadoRedLocal) {
             // BACKWARD COMPATIBILITY
-            var payload = { type: currentType, btn_a: btnA, btn_b: btnB, btn_x: btnX, btn_y: btnY, btn_l1: btnL1, btn_r1: btnR1, btn_l3: btnL3, btn_r3: btnR3, btn_select: btnSelect, btn_start: btnStart, dpad: dpad, lt: lt, rt: rt, ls_x: ls_x, ls_y: ls_y, rs_x: rs_x, rs_y: rs_y, seq: window.webSeq = ((window.webSeq || 0) + 1), timestampMs: Date.now() };
+            var payload = { type: currentType, btn_a: btnA, btn_b: btnB, btn_x: btnX, btn_y: btnY, btn_l1: btnL1, btn_r1: btnR1, btn_l3: btnL3, btn_r3: btnR3, btn_select: btnSelect, btn_start: btnStart, dpad: dpad, lt: lt, rt: rt, ls_x: ls_x, ls_y: ls_y, rs_x: rs_x, rs_y: rs_y };
+            if(keepalive) payload._ts = now;
             window.AndroidBridge.enviarEstadoRedLocal(JSON.stringify(payload));
         }
         lastJson = currentStateHash;
@@ -1517,12 +1482,9 @@ function startControllerLoop() {
     }
     // La inyección asíncrona es conducida por eventos visuales.
     // Solo dejamos un poll esporádico (4Hz) para prevenir timeouts de la conexión inactiva
-    if (window.AndroidBridge && window.AndroidBridge.setProtocolFrequency) {
-        window.AndroidBridge.setProtocolFrequency(protocolHz);
-    }
     window.controllerLoopId = setInterval(function() {
         if (appState === 'play') window.triggerStateUpdate(true);
-    }, Math.max(8, 1000 / protocolHz));
+    }, 1000 / protocolHz);
     window.triggerStateUpdate(true);
 }
 

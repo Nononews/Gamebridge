@@ -21,9 +21,9 @@ class AndroidBridge(private val activity: MainActivity) {
 
     private val udpManager = UdpManager()
 
+    /** Connect to PC Server via UDP Wi-Fi */
     @JavascriptInterface
-    fun conectarRedLocal(ip: String, pairingCode: String, profileType: String) {
-        currentProfile = sanitizeProfile(profileType)
+    fun conectarRedLocal(ip: String, pairingCode: String) {
         val tipo = when (currentProfile) {
             "xbox" -> 1
             "ps" -> 2
@@ -31,7 +31,7 @@ class AndroidBridge(private val activity: MainActivity) {
             else -> 0
         }
 
-        udpManager.connect(ip, pairingCode, tipo, currentProfile) { success, errorMsg, slot ->
+        udpManager.connect(ip, pairingCode, tipo) { success, errorMsg, slot ->
             activity.runOnUiThread {
                 if (success) {
                     activity.webView.evaluateJavascript("window.onNetworkConnected && window.onNetworkConnected('${escapeJs(ip)}', $slot)", null)
@@ -66,18 +66,6 @@ class AndroidBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun enviarEstadoRedLocal(jsonPayload: String) {
         udpManager.sendPayload(jsonPayload)
-    }
-
-    @JavascriptInterface
-    fun setProtocolFrequency(hz: Int) {
-        udpManager.setSendFrequencyHz(hz)
-    }
-
-    private fun sanitizeProfile(profileType: String): String {
-        return when (profileType) {
-            "xbox", "ps", "generic", "racing" -> profileType
-            else -> "xbox"
-        }
     }
 
     private fun escapeJs(value: String): String {
