@@ -272,7 +272,12 @@ def reset_virtual_gamepad(type_name=None):
 
 
 def is_local_request(remote_addr):
-    return remote_addr in ('127.0.0.1', '::1', 'localhost')
+    if remote_addr in ('127.0.0.1', '::1', 'localhost'):
+        return True
+    try:
+        return remote_addr == get_local_ip()
+    except Exception:
+        return False
 
 
 def rotate_pairing_code_if_needed(now=None):
