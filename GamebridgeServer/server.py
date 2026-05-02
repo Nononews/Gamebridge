@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+import secrets
 import socket
 import struct
 import threading
@@ -18,6 +19,10 @@ app = Flask(__name__, static_folder='public')
 UDP_IP = "0.0.0.0"
 UDP_PORT = 9090
 CLIENT_TIMEOUT_SECONDS = 2.0
+PAIRING_CODE_TTL_SECONDS = 300.0
+PAIRING_SESSION_TTL_SECONDS = 12 * 60 * 60.0
+PAIRING_MAX_ATTEMPTS = 8
+PAIRING_ATTEMPT_WINDOW_SECONDS = 60.0
 MAX_PLAYERS = 4
 
 state_lock = threading.RLock()
@@ -26,6 +31,10 @@ gamepad = None
 
 connected_clients = {}  # ip -> {"last_packet": float, "slot": int}
 latest_gamepad_state = {}
+paired_clients = {}  # ip -> {"paired_at": float, "last_seen": float}
+pairing_attempts = {}  # ip -> [attempt_timestamp, ...]
+pairing_code = f"{secrets.randbelow(1_000_000):06d}"
+pairing_code_created_at = time.time()
 
 NEUTRAL_PAYLOAD = {
     'type': 'xbox',
@@ -262,6 +271,69 @@ def reset_virtual_gamepad(type_name=None):
     apply_gamepad_state(neutral)
 
 
+def is_local_request(remote_addr):
+    return remote_addr in ('127.0.0.1', '::1', 'localhost')
+
+
+def rotate_pairing_code_if_needed(now=None):
+    global pairing_code, pairing_code_created_at
+    if now is None:
+        now = time.time()
+    with state_lock:
+        if now - pairing_code_created_at > PAIRING_CODE_TTL_SECONDS:
+            pairing_code = f"{secrets.randbelow(1_000_000):06d}"
+            pairing_code_created_at = now
+        return pairing_code
+
+
+def cleanup_pairing_sessions(now=None):
+    global paired_clients
+    if now is None:
+        now = time.time()
+    with state_lock:
+        expired_ips = [
+            ip for ip, data in paired_clients.items()
+            if now - data.get('last_seen', data.get('paired_at', 0.0)) > PAIRING_SESSION_TTL_SECONDS
+        ]
+        for ip in expired_ips:
+            paired_clients.pop(ip, None)
+
+
+def is_paired_client(client_ip):
+    now = time.time()
+    cleanup_pairing_sessions(now)
+    with state_lock:
+        session = paired_clients.get(client_ip)
+        if not session:
+            return False
+        session['last_seen'] = now
+        return True
+
+
+def pair_client(client_ip, submitted_code):
+    now = time.time()
+    active_code = rotate_pairing_code_if_needed(now)
+    code = str(submitted_code or '').strip()
+    with state_lock:
+        recent_attempts = [
+            ts for ts in pairing_attempts.get(client_ip, [])
+            if now - ts <= PAIRING_ATTEMPT_WINDOW_SECONDS
+        ]
+        if len(recent_attempts) >= PAIRING_MAX_ATTEMPTS:
+            pairing_attempts[client_ip] = recent_attempts
+            return False, "RATE_LIMITED"
+        recent_attempts.append(now)
+        pairing_attempts[client_ip] = recent_attempts
+
+    if code != active_code:
+        return False, "INVALID_PAIRING_CODE"
+
+    with state_lock:
+        paired_clients[client_ip] = {'paired_at': now, 'last_seen': now}
+        pairing_attempts.pop(client_ip, None)
+    return True, None
+
+
 def cleanup_dead_clients(now=None):
     global connected_clients, latest_gamepad_state
     if now is None:
@@ -346,6 +418,10 @@ def udp_server_loop():
         data, addr = sock.recvfrom(1024)
         now = time.time()
         client_ip = addr[0]
+
+        if not is_paired_client(client_ip):
+            continue
+
         slot = get_or_assign_client_slot(client_ip, now)
 
         try:
@@ -364,6 +440,8 @@ def udp_server_loop():
 def watchdog_loop():
     while True:
         time.sleep(0.25)
+        rotate_pairing_code_if_needed()
+        cleanup_pairing_sessions()
         cleanup_dead_clients()
 
 
@@ -389,24 +467,54 @@ def static_files(path):
 def get_status():
     client_ip = request.remote_addr
     cleanup_dead_clients(time.time())
+    rotate_pairing_code_if_needed()
 
     with state_lock:
         is_connected = len(connected_clients) > 0
+        is_paired = client_ip in paired_clients
         slot = 0
         if client_ip in connected_clients:
             slot = connected_clients[client_ip]['slot']
         elif is_connected:
             slot = 1
 
-        return {
+        response = {
             "service": "gamebridge",
             "ready": (gamepad is not None),
             "ip": get_local_ip(),
             "connected": is_connected,
             "vigem": (gamepad is not None),
             "slot": slot,
+            "paired": is_paired,
+            "pairRequired": True,
+            "pairedCount": len(paired_clients),
             "timeoutMs": int(CLIENT_TIMEOUT_SECONDS * 1000)
         }
+        if is_local_request(client_ip):
+            response["pairCode"] = pairing_code
+            response["pairCodeTtlMs"] = max(0, int((PAIRING_CODE_TTL_SECONDS - (time.time() - pairing_code_created_at)) * 1000))
+        return response
+
+
+@app.route('/api/pair', methods=['POST'])
+def pair_device():
+    client_ip = request.remote_addr
+    try:
+        body = request.get_json(silent=True) or {}
+    except Exception:
+        body = {}
+
+    paired, error = pair_client(client_ip, body.get('code'))
+    if not paired:
+        status_code = 429 if error == "RATE_LIMITED" else 403
+        return {"ok": False, "error": error}, status_code
+
+    return {
+        "ok": True,
+        "service": "gamebridge",
+        "paired": True,
+        "timeoutMs": int(CLIENT_TIMEOUT_SECONDS * 1000)
+    }
 
 
 @app.route('/api/state')

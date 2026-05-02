@@ -25,7 +25,7 @@ class UdpManager {
         }
     }
 
-    fun connect(ip: String, tipo: Int, onConnected: (Boolean, String?, Int) -> Unit) {
+    fun connect(ip: String, pairingCode: String, tipo: Int, onConnected: (Boolean, String?, Int) -> Unit) {
         ensureScope()
         udpScope.launch {
             try {
@@ -37,6 +37,22 @@ class UdpManager {
                 val status = fetchServerStatus(ip)
                 if (status.optString("service") != "gamebridge" || !status.optBoolean("ready", false)) {
                     onConnected(false, "Servidor GameBridge no valido", 0)
+                    return@launch
+                }
+                if (pairingCode.trim().length != 6) {
+                    onConnected(false, "Codigo de emparejamiento invalido", 0)
+                    return@launch
+                }
+
+                val pairResult = pairWithServer(ip, pairingCode.trim())
+                if (!pairResult.optBoolean("ok", false) || pairResult.optString("service") != "gamebridge") {
+                    val error = pairResult.optString("error")
+                    val message = if (error == "RATE_LIMITED") {
+                        "Demasiados intentos. Espera un minuto e intenta de nuevo"
+                    } else {
+                        "Codigo de emparejamiento incorrecto"
+                    }
+                    onConnected(false, message, 0)
                     return@launch
                 }
 
@@ -88,6 +104,37 @@ class UdpManager {
             }
             val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             return JSONObject(body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun pairWithServer(ip: String, code: String): JSONObject {
+        val url = URL("http://$ip:8080/api/pair")
+        val payload = JSONObject().put("code", code).toString().toByteArray(Charsets.UTF_8)
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 2500
+            readTimeout = 2500
+            useCaches = false
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+        }
+
+        try {
+            connection.outputStream.use { it.write(payload) }
+            val stream = if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "{}"
+            val result = JSONObject(body)
+            if (connection.responseCode !in 200..299) {
+                result.put("ok", false)
+            }
+            return result
         } finally {
             connection.disconnect()
         }

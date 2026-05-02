@@ -77,7 +77,7 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
 
     /** Connect to PC Server via UDP Wi-Fi */
     @JavascriptInterface
-    fun conectarRedLocal(ip: String) {
+    fun conectarRedLocal(ip: String, pairingCode: String) {
         val tipo = when (hidManager.currentProfile) {
             "xbox" -> 1
             "ps" -> 2
@@ -85,7 +85,7 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
             else -> 0
         }
 
-        udpManager.connect(ip, tipo) { success, errorMsg, slot ->
+        udpManager.connect(ip, pairingCode, tipo) { success, errorMsg, slot ->
             activity.runOnUiThread {
                 if (success) {
                     activity.webView.evaluateJavascript("window.onNetworkConnected && window.onNetworkConnected('${escapeJs(ip)}', $slot)", null)

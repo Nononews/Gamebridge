@@ -169,6 +169,12 @@
         <p style="margin-top:10px; font-size:0.9rem; color:var(--text-muted);">Ingresa esta numeración en la aplicación de tu celular</p>
     </div>
 
+    <div class="ip-card">
+        <h3>Codigo de Emparejamiento</h3>
+        <div class="ip-address" id="pair-code-display">------</div>
+        <p style="margin-top:10px; font-size:0.9rem; color:var(--text-muted);">Escribe este codigo en tu celular para autorizar la conexion Wi-Fi</p>
+    </div>
+
     <div class="info-grid">
         <div class="info-box" id="driver-box">
             <div class="box-title">Driver ViGEmBus</div>
@@ -241,6 +247,11 @@
                 document.querySelector('.ip-card').style.borderColor = 'var(--border)';
             }
 
+            const pairCode = document.getElementById('pair-code-display');
+            if (pairCode) {
+                pairCode.innerText = data.pairCode || 'LOCAL';
+            }
+
             const dbox = document.getElementById('driver-box');
             const dval = document.getElementById('driver-val');
             if (data.vigem) {
@@ -276,8 +287,12 @@
     function pullState() {
         fetch('/api/state')
         .then(r => r.json())
-        .then(state => {
-            if (!state || Object.keys(state).length === 0) return;
+        .then(allStates => {
+            if (!allStates || Object.keys(allStates).length === 0) return;
+            
+            // Accedemos al estado del Slot 1 (P1)
+            const state = allStates["1"];
+            if (!state) return;
             
             if (state.type) {
                 document.body.className = `theme-${state.type}`;
@@ -290,23 +305,26 @@
                 if(val) el.classList.add('on'); else el.classList.remove('on');
             };
             
-            setOn('a', state.btn_a); setOn('b', state.btn_b); setOn('x', state.btn_x); setOn('y', state.btn_y);
-            setOn('lb', state.btn_l1); setOn('rb', state.btn_r1);
-            setOn('lt', state.lt > 0.5); setOn('rt', state.rt > 0.5);
+            const b = state.buttons || [];
+            const a = state.axes || [];
             
-            const dp = state.dpad || 0;
-            setOn('up', [1,2,8].includes(dp));
-            setOn('right', [2,3,4].includes(dp));
-            setOn('down', [4,5,6].includes(dp));
-            setOn('left', [6,7,8].includes(dp));
+            setOn('a', b[0]?.pressed); setOn('b', b[1]?.pressed); setOn('x', b[2]?.pressed); setOn('y', b[3]?.pressed);
+            setOn('lb', b[4]?.pressed); setOn('rb', b[5]?.pressed);
+            setOn('lt', b[6]?.pressed); setOn('rt', b[7]?.pressed);
+            
+            // D-pad
+            setOn('up', b[12]?.pressed);
+            setOn('down', b[13]?.pressed);
+            setOn('left', b[14]?.pressed);
+            setOn('right', b[15]?.pressed);
             
             const thumbOffset = 12; // max translation pixels for thumbstick
-            const ltx = (state.ls_x || 0) * thumbOffset; 
-            const lty = (state.ls_y || 0) * thumbOffset; 
+            const ltx = (a[0] || 0) * thumbOffset; 
+            const lty = (a[1] || 0) * thumbOffset; 
             document.getElementById('vi-ls').style.transform = `translate(${ltx}px, ${lty}px)`;
             
-            const rtx = (state.rs_x || 0) * thumbOffset; 
-            const rty = (state.rs_y || 0) * thumbOffset;
+            const rtx = (a[2] || 0) * thumbOffset; 
+            const rty = (a[3] || 0) * thumbOffset;
             document.getElementById('vi-rs').style.transform = `translate(${rtx}px, ${rty}px)`;
         }).catch(e => { console.error("Error pulling state", e); });
     }

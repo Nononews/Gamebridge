@@ -700,6 +700,9 @@
             <div style="color:var(--theme-accent);font-weight:700;font-size:0.75rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;">DIRECCION IP DEL PC</div>
             <input type="text" id="pc-ip-input" placeholder="ej: 192.168.1.5" style="width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:8px;padding:12px;color:white;font-size:1.1rem;text-align:center;font-family:monospace;outline:none;">
             <div id="ip-error-msg" style="color:#ff4444;font-size:0.75rem;margin-top:8px;display:none;">Por favor ingresa una IP v&aacute;lida</div>
+            <div style="color:var(--theme-accent);font-weight:700;font-size:0.75rem;letter-spacing:1px;text-transform:uppercase;margin:16px 0 12px;">CODIGO DEL PC</div>
+            <input type="text" id="pc-pair-code-input" placeholder="000000" maxlength="6" inputmode="numeric" style="width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:8px;padding:12px;color:white;font-size:1.1rem;text-align:center;font-family:monospace;outline:none;letter-spacing:4px;">
+            <div id="pair-code-error-msg" style="color:#ff4444;font-size:0.75rem;margin-top:8px;display:none;">Ingresa el c&oacute;digo de 6 d&iacute;gitos que aparece en el PC</div>
         </div>
 
         <div id="pair-status-msg" style="font-size:0.82rem;color:var(--text-muted);">Listo para conectar...</div>
@@ -1283,6 +1286,7 @@ function connectToPC() {
     var savedIp = localStorage.getItem('gamebridge_last_ip') || '';
     document.getElementById('pc-ip-input').value = savedIp;
     document.getElementById('ip-error-msg').style.display = 'none';
+    document.getElementById('pair-code-error-msg').style.display = 'none';
     
     document.getElementById('pair-status-msg').textContent = 'Ingresa la IP y conecta';
     document.getElementById('scan-dot').classList.remove('on');
@@ -1298,14 +1302,20 @@ function startWifiConnection() {
     if (actionBtns) actionBtns.style.display = 'flex';
     
     var ip = document.getElementById('pc-ip-input').value.trim();
+    var pairCode = (document.getElementById('pc-pair-code-input').value || '').trim();
     if (!ip || !ip.match(/^\d{1,3}(\.\d{1,3}){3}$/)) {
         document.getElementById('ip-error-msg').style.display = 'block';
+        return;
+    }
+    if (!pairCode || !pairCode.match(/^\d{6}$/)) {
+        document.getElementById('pair-code-error-msg').style.display = 'block';
         return;
     }
     
     // Guardar para futuro
     localStorage.setItem('gamebridge_last_ip', ip);
     document.getElementById('ip-error-msg').style.display = 'none';
+    document.getElementById('pair-code-error-msg').style.display = 'none';
     
     document.getElementById('pair-status-msg').textContent = 'Conectando a ' + ip + '...';
     document.getElementById('scan-dot').classList.add('on');
@@ -1318,7 +1328,7 @@ function startWifiConnection() {
     }, 10000);
 
     if (window.AndroidBridge && window.AndroidBridge.conectarRedLocal) {
-        window.AndroidBridge.conectarRedLocal(ip);
+        window.AndroidBridge.conectarRedLocal(ip, pairCode);
     } else {
         // Modo web (simulacion)
         setTimeout(function() {
