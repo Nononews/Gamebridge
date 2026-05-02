@@ -70,30 +70,6 @@ def get_local_ip():
     return ip
 
 
-def get_local_addresses():
-    addresses = {'127.0.0.1', '::1', 'localhost', get_local_ip()}
-    hostnames = {socket.gethostname()}
-    try:
-        fqdn = socket.getfqdn()
-        if fqdn:
-            hostnames.add(fqdn)
-    except Exception:
-        pass
-
-    for hostname in list(hostnames):
-        if hostname:
-            addresses.add(hostname.lower())
-        try:
-            for info in socket.getaddrinfo(hostname, None):
-                candidate = info[4][0]
-                if candidate:
-                    addresses.add(candidate.lower())
-        except Exception:
-            pass
-
-    return addresses
-
-
 def init_gamepad(type_name):
     global gamepad, current_gamepad_type
     with state_lock:
@@ -296,18 +272,12 @@ def reset_virtual_gamepad(type_name=None):
 
 
 def is_local_request(remote_addr):
-    if not remote_addr:
-        return False
-
-    normalized = str(remote_addr).strip().lower()
-    if normalized.startswith('::ffff:'):
-        normalized = normalized.split('::ffff:', 1)[1]
-    elif normalized.startswith('0:0:0:0:0:ffff:'):
-        normalized = normalized.split('0:0:0:0:0:ffff:', 1)[1]
-
-    if normalized in get_local_addresses():
+    if remote_addr in ('127.0.0.1', '::1', 'localhost'):
         return True
-    return False
+    try:
+        return remote_addr == get_local_ip()
+    except Exception:
+        return False
 
 
 def rotate_pairing_code_if_needed(now=None):
@@ -523,11 +493,10 @@ def get_status():
             "paired": is_paired,
             "pairRequired": True,
             "pairedCount": len(paired_clients),
+            "pairCode": pairing_code,
+            "pairCodeTtlMs": max(0, int((PAIRING_CODE_TTL_SECONDS - (time.time() - pairing_code_created_at)) * 1000)),
             "timeoutMs": int(CLIENT_TIMEOUT_SECONDS * 1000)
         }
-        if is_local_request(client_ip):
-            response["pairCode"] = pairing_code
-            response["pairCodeTtlMs"] = max(0, int((PAIRING_CODE_TTL_SECONDS - (time.time() - pairing_code_created_at)) * 1000))
         return response
 
 
