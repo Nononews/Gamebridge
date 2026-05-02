@@ -496,12 +496,6 @@
             <button class="opt-btn sel" onclick="setHaptic(1)">Media</button>
             <button class="opt-btn" onclick="setHaptic(2)">Fuerte</button>
         </div>
-        <div class="modal-title" style="margin-top:6px;">Frecuencia Wi-Fi</div>
-        <div class="haptic-opts" id="freq-options">
-            <button class="opt-btn" onclick="setProtocolHz(30, event)">30 Hz</button>
-            <button class="opt-btn sel" onclick="setProtocolHz(60, event)">60 Hz</button>
-            <button class="opt-btn" onclick="setProtocolHz(120, event)">120 Hz</button>
-        </div>
     </div>
 
     <!-- MODAL: GUARDAR -->
@@ -671,7 +665,7 @@
 var currentType   = 'init';
 var appState      = 'test';
 var hapticLevel   = 1;
-var protocolHz    = 60;
+var SEND_INTERVAL_MS = 16;
 var currentRgbGlow = '170,85,255';
 var activeEl      = null;
 var isDragging    = false;
@@ -802,15 +796,6 @@ function setHaptic(lvl) {
     for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
     event.target.classList.add('sel');
     hapticUI(25);
-}
-
-function setProtocolHz(hz, evt) {
-    protocolHz = hz;
-    var btns = document.querySelectorAll('#freq-options .opt-btn');
-    for (var b = 0; b < btns.length; b++) btns[b].classList.remove('sel');
-    if (evt && evt.target) evt.target.classList.add('sel');
-    if (appState === 'play') startControllerLoop();
-    hapticUI(18);
 }
 
 /* ================================================================
@@ -1484,7 +1469,7 @@ function startControllerLoop() {
     // Solo dejamos un poll esporádico (4Hz) para prevenir timeouts de la conexión inactiva
     window.controllerLoopId = setInterval(function() {
         if (appState === 'play') window.triggerStateUpdate(true);
-    }, 1000 / protocolHz);
+    }, SEND_INTERVAL_MS);
     window.triggerStateUpdate(true);
 }
 
