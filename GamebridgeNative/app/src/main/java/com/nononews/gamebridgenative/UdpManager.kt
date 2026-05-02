@@ -28,7 +28,7 @@ class UdpManager {
         }
     }
 
-    fun connect(ip: String, pairingCode: String, tipo: Int, onConnected: (Boolean, String?, Int) -> Unit) {
+    fun connect(ip: String, pairingCode: String, tipo: Int, profileType: String, onConnected: (Boolean, String?, Int) -> Unit) {
         ensureScope()
         udpScope.launch {
             try {
@@ -47,7 +47,7 @@ class UdpManager {
                     return@launch
                 }
 
-                val pairResult = pairWithServer(ip, pairingCode.trim())
+                val pairResult = pairWithServer(ip, pairingCode.trim(), profileType)
                 if (!pairResult.optBoolean("ok", false) || pairResult.optString("service") != "gamebridge") {
                     val error = pairResult.optString("error")
                     val message = if (error == "RATE_LIMITED") {
@@ -113,9 +113,13 @@ class UdpManager {
         }
     }
 
-    private fun pairWithServer(ip: String, code: String): JSONObject {
+    private fun pairWithServer(ip: String, code: String, profileType: String): JSONObject {
         val url = URL("http://$ip:8080/api/pair")
-        val payload = JSONObject().put("code", code).toString().toByteArray(Charsets.UTF_8)
+        val payload = JSONObject()
+            .put("code", code)
+            .put("profile", profileType)
+            .toString()
+            .toByteArray(Charsets.UTF_8)
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 2500

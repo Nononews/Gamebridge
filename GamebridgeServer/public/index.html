@@ -260,10 +260,12 @@
             if (qval && data.quality && data.quality.level !== 'unknown') {
                 const latency = data.quality.latencyMs == null ? '--' : Math.round(data.quality.latencyMs) + 'ms';
                 const jitter = data.quality.jitterMs == null ? '--' : Math.round(data.quality.jitterMs) + 'ms';
-                qval.innerText = latency + ' / J' + jitter;
+                const rate = data.quality.packetRateHz ? Math.round(data.quality.packetRateHz) + 'Hz' : '--Hz';
+                const recommended = data.quality.recommendedHz || 60;
+                qval.innerText = latency + ' / J' + jitter + ' / ' + rate + ' | Usa ' + recommended + 'Hz';
                 qval.style.color = data.quality.level === 'poor' ? '#ff4444' : (data.quality.level === 'fair' ? '#ffd447' : '#00e676');
             } else if (qval) {
-                qval.innerText = 'Esperando...';
+                qval.innerText = data.connected ? 'Midiendo... usa 60Hz' : 'Esperando...';
                 qval.style.color = 'var(--accent)';
             }
 

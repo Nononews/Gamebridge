@@ -840,7 +840,8 @@ function updateQualityIndicator(quality) {
     var color = colors[quality.level] || '#888';
     var latency = quality.latencyMs == null ? '--' : Math.round(quality.latencyMs) + 'ms';
     var jitter = quality.jitterMs == null ? '--' : Math.round(quality.jitterMs) + 'ms';
-    label.textContent = (names[quality.level] || 'Red') + ' ' + latency + ' J' + jitter + ' ' + protocolHz + 'Hz';
+    var rec = quality.recommendedHz ? ' rec ' + quality.recommendedHz + 'Hz' : '';
+    label.textContent = (names[quality.level] || 'Red') + ' ' + latency + ' J' + jitter + rec;
     label.style.display = 'inline';
     label.style.color = color;
     dot.style.backgroundColor = color;
@@ -1269,7 +1270,7 @@ function startWifiConnection() {
     }, 10000);
 
     if (window.AndroidBridge && window.AndroidBridge.conectarRedLocal) {
-        window.AndroidBridge.conectarRedLocal(ip, pairCode);
+        window.AndroidBridge.conectarRedLocal(ip, pairCode, currentType);
     } else {
         // Modo web (simulacion)
         setTimeout(function() {

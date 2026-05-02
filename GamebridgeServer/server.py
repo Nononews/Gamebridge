@@ -318,7 +318,11 @@ def is_paired_client(client_ip):
         return True
 
 
-def pair_client(client_ip, submitted_code):
+def sanitize_profile(profile_type):
+    return profile_type if profile_type in ('xbox', 'ps', 'generic', 'racing') else 'xbox'
+
+
+def pair_client(client_ip, submitted_code, profile_type='xbox'):
     now = time.time()
     active_code = rotate_pairing_code_if_needed(now)
     code = str(submitted_code or '').strip()
@@ -337,7 +341,11 @@ def pair_client(client_ip, submitted_code):
         return False, "INVALID_PAIRING_CODE"
 
     with state_lock:
-        paired_clients[client_ip] = {'paired_at': now, 'last_seen': now}
+        paired_clients[client_ip] = {
+            'paired_at': now,
+            'last_seen': now,
+            'profile': sanitize_profile(profile_type)
+        }
         pairing_attempts.pop(client_ip, None)
     return True, None
 
@@ -361,10 +369,12 @@ def cleanup_dead_clients(now=None):
         reset_virtual_gamepad()
 
 
-def get_or_assign_client_slot(client_ip, now):
+def get_or_assign_client_slot(client_ip, now, profile_type=None):
     with state_lock:
+        profile = sanitize_profile(profile_type or paired_clients.get(client_ip, {}).get('profile', 'xbox'))
         if client_ip in connected_clients:
             connected_clients[client_ip]['last_packet'] = now
+            connected_clients[client_ip]['profile'] = profile
             return connected_clients[client_ip]['slot']
 
         used_slots = [d['slot'] for d in connected_clients.values()]
@@ -374,7 +384,7 @@ def get_or_assign_client_slot(client_ip, now):
         if slot > MAX_PLAYERS:
             slot = MAX_PLAYERS
 
-        connected_clients[client_ip] = {'last_packet': now, 'slot': slot}
+        connected_clients[client_ip] = {'last_packet': now, 'slot': slot, 'profile': profile}
         return slot
 
 
@@ -384,13 +394,13 @@ def is_sequence_newer(seq, last_seq):
 
 
 def update_protocol_stats(client_ip, meta, now):
-    if not meta or meta.get('seq') is None:
-        return True
-
-    try:
-        seq = int(meta['seq']) % SEQ_MODULO
-    except (TypeError, ValueError):
-        return True
+    meta = meta or {}
+    seq = None
+    if meta and meta.get('seq') is not None:
+        try:
+            seq = int(meta['seq']) % SEQ_MODULO
+        except (TypeError, ValueError):
+            seq = None
     client_ts_ms = meta.get('timestamp_ms')
     now_ms = now * 1000.0
 
@@ -408,14 +418,15 @@ def update_protocol_stats(client_ip, meta, now):
         })
 
         last_seq = stats.get('last_seq')
-        if last_seq is not None and not is_sequence_newer(seq, last_seq):
-            stats['old_packets'] = stats.get('old_packets', 0) + 1
-            return False
+        if seq is not None:
+            if last_seq is not None and not is_sequence_newer(seq, last_seq):
+                stats['old_packets'] = stats.get('old_packets', 0) + 1
+                return False
 
-        if last_seq is not None:
-            gap = (seq - last_seq) % SEQ_MODULO
-            if gap > 1:
-                stats['lost_packets'] = stats.get('lost_packets', 0) + min(gap - 1, 10_000)
+            if last_seq is not None:
+                gap = (seq - last_seq) % SEQ_MODULO
+                if gap > 1:
+                    stats['lost_packets'] = stats.get('lost_packets', 0) + min(gap - 1, 10_000)
 
         previous_arrival = stats.get('last_arrival')
         if previous_arrival:
@@ -437,7 +448,8 @@ def update_protocol_stats(client_ip, meta, now):
                         stats['jitter_ms'] = (stats.get('jitter_ms', 0.0) * 0.85) + (variation * 0.15)
                 stats['last_latency_ms'] = latency
 
-        stats['last_seq'] = seq
+        if seq is not None:
+            stats['last_seq'] = seq
         stats['accepted_packets'] = stats.get('accepted_packets', 0) + 1
         stats['last_arrival'] = now
         return True
@@ -451,6 +463,7 @@ def quality_from_stats(stats):
             "latencyMs": None,
             "jitterMs": None,
             "packetRateHz": 0,
+            "recommendedHz": 60,
             "acceptedPackets": 0,
             "oldPackets": 0,
             "lostPackets": 0
@@ -480,12 +493,19 @@ def quality_from_stats(stats):
     else:
         level = "poor"
 
+    recommended_hz = 120
+    if score < 80 or (jitter is not None and jitter > 8) or (latency is not None and latency > 45):
+        recommended_hz = 60
+    if score < 55 or (jitter is not None and jitter > 16) or (latency is not None and latency > 90):
+        recommended_hz = 30
+
     return {
         "level": level,
         "score": score,
         "latencyMs": None if latency is None else round(latency, 1),
         "jitterMs": None if jitter is None else round(jitter, 1),
         "packetRateHz": round(stats.get('packet_rate_hz', 0.0), 1),
+        "recommendedHz": recommended_hz,
         "acceptedPackets": stats.get('accepted_packets', 0),
         "oldPackets": old_packets,
         "lostPackets": lost_packets
@@ -563,7 +583,12 @@ def udp_server_loop():
             if not update_protocol_stats(client_ip, meta, now):
                 continue
 
-            slot = get_or_assign_client_slot(client_ip, now)
+            if payload.get('type') == 'generic':
+                paired_profile = paired_clients.get(client_ip, {}).get('profile')
+                if paired_profile in ('xbox', 'ps', 'racing'):
+                    payload['type'] = paired_profile
+
+            slot = get_or_assign_client_slot(client_ip, now, payload.get('type'))
 
             with state_lock:
                 latest_gamepad_state[str(slot)] = payload_to_frontend_state(payload)
@@ -649,7 +674,7 @@ def pair_device():
     except Exception:
         body = {}
 
-    paired, error = pair_client(client_ip, body.get('code'))
+    paired, error = pair_client(client_ip, body.get('code'), body.get('profile'))
     if not paired:
         status_code = 429 if error == "RATE_LIMITED" else 403
         return {"ok": False, "error": error}, status_code
