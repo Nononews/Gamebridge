@@ -78,16 +78,35 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
     /** Connect to PC Server via UDP Wi-Fi */
     @JavascriptInterface
     fun conectarRedLocal(ip: String) {
-        udpManager.connect(ip) { success, errorMsg ->
+        val tipo = when (hidManager.currentProfile) {
+            "xbox" -> 1
+            "ps" -> 2
+            "racing" -> 3
+            else -> 0
+        }
+
+        udpManager.connect(ip, tipo) { success, errorMsg, slot ->
             activity.runOnUiThread {
                 if (success) {
-                    activity.webView.evaluateJavascript("window.onNetworkConnected && window.onNetworkConnected('$ip')", null)
+                    activity.webView.evaluateJavascript("window.onNetworkConnected && window.onNetworkConnected('${escapeJs(ip)}', $slot)", null)
                 } else {
-                    val safeError = errorMsg?.replace("'", "") ?: "Unknown error"
+                    val safeError = escapeJs(errorMsg ?: "Unknown error")
                     activity.webView.evaluateJavascript("window.onNetworkError && window.onNetworkError('$safeError')", null)
                 }
             }
         }
+    }
+
+    /** Clear current Wi-Fi input state without tearing down Bluetooth. */
+    @JavascriptInterface
+    fun resetRedLocal() {
+        val tipo = when (hidManager.currentProfile) {
+            "xbox" -> 1
+            "ps" -> 2
+            "racing" -> 3
+            else -> 0
+        }
+        udpManager.sendBinary(tipo, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f)
     }
 
     /** Send binary structs directly to PC via Coroutines (And Bluetooth HID simultaneously) */
@@ -129,5 +148,13 @@ class AndroidBridge(private val activity: MainActivity, private val hidManager: 
         report[4] = rightX.toByte()
         report[5] = rightY.toByte()
         hidManager.sendReport(report)
+    }
+
+    private fun escapeJs(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", " ")
+            .replace("\r", " ")
     }
 }

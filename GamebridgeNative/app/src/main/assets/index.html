@@ -1327,10 +1327,13 @@ function startWifiConnection() {
     }
 }
 
-window.onNetworkConnected = function(ip) {
+window.onNetworkConnected = function(ip, slot) {
     if (typeof connTimeoutId !== 'undefined' && connTimeoutId) { clearTimeout(connTimeoutId); connTimeoutId = null; }
     document.getElementById('pair-status-msg').textContent = '¡Conectado! Preparando control...';
     window.currentPcIp = ip;
+    if (typeof slot !== 'undefined' && slot > 0) {
+        document.getElementById('hud-title').textContent = 'P' + slot + ' - Conectado';
+    }
     // Esperar un segundito y cargar
     setTimeout(function() {
         setMode('play');
@@ -1680,18 +1683,30 @@ window.triggerStateUpdate = function() {
 };
 
 function startControllerLoop() {
+    stopControllerLoop(false);
+    lastJson = '';
+    window.lastKeepaliveTime = 0;
+    if (window.AndroidBridge && window.AndroidBridge.resetRedLocal) {
+        window.AndroidBridge.resetRedLocal();
+    }
     // La inyección asíncrona es conducida por eventos visuales.
     // Solo dejamos un poll esporádico (4Hz) para prevenir timeouts de la conexión inactiva
     window.controllerLoopId = setInterval(function() {
         if (appState === 'play') window.triggerStateUpdate();
     }, 250);
+    window.triggerStateUpdate();
 }
 
-function stopControllerLoop() {
+function stopControllerLoop(sendNeutral) {
+    if (sendNeutral !== false && window.AndroidBridge && window.AndroidBridge.resetRedLocal) {
+        window.AndroidBridge.resetRedLocal();
+    }
     if (window.controllerLoopId) {
         clearInterval(window.controllerLoopId);
         window.controllerLoopId = null;
     }
+    lastJson = '';
+    window.lastKeepaliveTime = 0;
 }
 </script>
 </body>
